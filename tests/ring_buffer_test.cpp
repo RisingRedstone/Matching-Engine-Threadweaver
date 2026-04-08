@@ -7,7 +7,7 @@
 #include <thread>
 #include <unistd.h>
 
-#include "../src/lockless_ring_buffer.hpp"
+#include "../src/static_lockless_ring_buffer.hpp"
 using ull = unsigned long long int;
 using atomic_ull = std::atomic<ull>;
 

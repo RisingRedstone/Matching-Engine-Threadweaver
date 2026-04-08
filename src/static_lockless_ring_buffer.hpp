@@ -2,7 +2,7 @@
 #pragma once
 
 /**
- * @file lockless_ring_buffer.hpp
+ * @file static_lockless_ring_buffer.hpp
  * @brief Provides a static size implementation of a Lockless Ring Buffer.
  * */
 
