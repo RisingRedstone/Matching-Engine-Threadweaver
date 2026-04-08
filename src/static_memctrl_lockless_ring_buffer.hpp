@@ -17,7 +17,7 @@
 #include "static_lockless_ring_buffer.hpp"
 
 /**
- * @defgroup Static_Memctrl_Lockless_RingBuffer_Module Static Memory Controlled
+ * @defgroup Static_Memctrl_Lockless_RingBuffer_Module Static Memory Controlled Ring Buffer ADT
  * Ring Buffer ADT Lockless Ring Buffer ADT
  * @brief This module is a memory controlled extension of @ref
  * Static_Lockless_RingBuffer_Module. Here ths memory is allocated and managed
@@ -68,7 +68,7 @@ struct RingBufferMemAllocation {
  * @code
  * std::optional<LockLessRingBufferMemInit> r_buffer_opt = 
  * LockLessRingBufferMemInit<unsigned long long int, int, 1024>::create();
- * if(!r_buffer.has_value()) {
+ * if(!r_buffer_opt.has_value()) {
  *  perror("Consumer buffer could not be created");
  *  return -1;
  * }
