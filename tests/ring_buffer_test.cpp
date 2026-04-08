@@ -7,13 +7,20 @@
 #include <thread>
 #include <unistd.h>
 
+#define MEM_CTRL 0
+
+#if MEM_CTRL == 0
+#include "../src/static_memctrl_lockless_ring_buffer.hpp"
+#else
 #include "../src/static_lockless_ring_buffer.hpp"
+#endif
 using ull = unsigned long long int;
 using atomic_ull = std::atomic<ull>;
 
 const int num_of_writers = 4;
 const unsigned int data_size = 1024;
 
+#if MEM_CTRL == 1
 typedef struct {
   alignas(64) atomic_ull read_head;
   alignas(64) atomic_ull commit_head;
@@ -21,12 +28,17 @@ typedef struct {
 
   int data[data_size];
 } RingBufferAllocation;
+#endif
 
 void ReaderChildProcess(LockLessRingBufferRead<ull, int, data_size>);
 void WriterChildProcess(LockLessRingBufferWrite<ull, int, data_size>, int);
 
 int main() {
   // make the memory
+#if MEM_CTRL == 0
+  auto r_buffer =
+      LockLessRingBufferMemInit<ull, int, data_size>::create().value();
+#else
   void *ptr = mmap(NULL, sizeof(RingBufferAllocation), PROT_READ | PROT_WRITE,
                    MAP_SHARED | MAP_ANON, -1, 0);
   if (ptr == MAP_FAILED) {
@@ -40,6 +52,7 @@ int main() {
   LockLessRingBufferInit r_buffer = LockLessRingBufferInit<ull, int, data_size>(
       &buff_alloc->read_head, &buff_alloc->write_head, &buff_alloc->commit_head,
       buff_alloc->data);
+#endif
 
   int reader_pid;
 
@@ -84,7 +97,9 @@ int main() {
     waitpid(writer_pids[i], &status, 0);
 
 main_thread_end:
+#if MEM_CTRL == 1
   munmap(ptr, sizeof(RingBufferAllocation));
+#endif
 children_program_end:
   return 0;
 }

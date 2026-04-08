@@ -235,11 +235,12 @@ public:
  * LockLessRingBufferInit r_buffer = 
  * LockLessRingBufferInit<unsigned long long int, int, 1024> (read_head, write_head, commit_head, array);
  *
- * LockLessRingBufferRead r_buffer_consumer_opt = r_buffer.create_consumer();
+ * std::optional<LockLessRingBufferRead> r_buffer_consumer_opt = r_buffer.create_consumer();
  * if(!r_buffer_consumer_opt.has_value()) {
  *  perror("Consumer buffer could not be created");
  *  return -1;
  * }
+ * LockLessRingBufferRead r_buffer_consumer = r_buffer_consumer_opt.value();
  * LockLessRingBufferWrite r_buffer_producer_1 = r_buffer.create_producer();
  * LockLessRingBufferWrite r_buffer_producer_2 = r_buffer.create_producer();
  * LockLessRingBufferWrite r_buffer_producer_3 = r_buffer.create_producer();

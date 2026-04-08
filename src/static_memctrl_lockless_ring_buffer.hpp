@@ -1,0 +1,153 @@
+
+#pragma once
+
+/**
+ * @file static_memctrl_lockless_ring_buffer.hpp
+ * @brief Provides a static size memory controlled implementation of a Lockless
+ * Ring Buffer.
+ * */
+
+#include <atomic>
+#include <cstddef>
+#include <cstdio>
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "static_lockless_ring_buffer.hpp"
+
+/**
+ * @defgroup Static_Memctrl_Lockless_RingBuffer_Module Static Memory Controlled
+ * Ring Buffer ADT Lockless Ring Buffer ADT
+ * @brief This module is a memory controlled extension of @ref
+ * Static_Lockless_RingBuffer_Module. Here ths memory is allocated and managed
+ * by @ref LockLessRingBufferMemInit class itself
+ *
+ * @{
+ */
+
+/**
+ * @brief A helper struct to allocate memory pages and memory mapping the
+ * allocated space
+ * @tparam Tptr The atomic pointer counter to the ring buffer index. (eg,
+ * unsigned long long int)
+ * @tparam Uarr The container data type. (eg, unsigned long long int, int, some
+ * struct)
+ * @tparam U_size The size of the lockless ring buffer.
+ * @note
+ * * The U_size needs to be a power of 2 as defined by @ref PowerOfTwo
+ * concept.
+ * */
+template <class Tptr, class Uarr, size_t U_size>
+  requires PowerOfTwo<U_size>
+struct RingBufferMemAllocation {
+  using atomic_T = std::atomic<Tptr>;
+  alignas(64) atomic_T read_head;
+  alignas(64) atomic_T write_head;
+  alignas(64) atomic_T commit_head;
+  Uarr data[U_size];
+};
+
+// clang-format off
+/**
+ * @class LockLessRingBufferMemInit
+ * @brief This class defines the LocklessRingBuffer and can be used to get the
+ * consumer and producer variants.
+ * @tparam Tptr The atomic pointer counter to the ring buffer index. (eg,
+ * unsigned long long int)
+ * @tparam Uarr The container data type. (eg, unsigned long long int, int, some
+ * struct)
+ * @tparam U_size The size of the lockless ring buffer.
+ * @note
+ * * Only one consumer can be created
+ * * The U_size needs to be a power of 2 as defined by @ref PowerOfTwo
+ * concept.
+ *
+ * @details
+ * ### Usage Example:
+ * @code
+ * std::optional<LockLessRingBufferMemInit> r_buffer_opt = 
+ * LockLessRingBufferMemInit<unsigned long long int, int, 1024>::create();
+ * if(!r_buffer.has_value()) {
+ *  perror("Consumer buffer could not be created");
+ *  return -1;
+ * }
+ * LockLessRingBufferMemInit r_buffer = r_buffer_opt.value();
+ *
+ * std::optional<LockLessRingBufferRead> r_buffer_consumer_opt = r_buffer.create_consumer();
+ * if(!r_buffer_consumer_opt.has_value()) {
+ *  perror("Consumer buffer could not be created");
+ *  return -1;
+ * }
+ * LockLessRingBufferRead r_buffer_consumer = r_buffer_consumer_opt.value();
+ * LockLessRingBufferWrite r_buffer_producer_1 = r_buffer.create_producer();
+ * LockLessRingBufferWrite r_buffer_producer_2 = r_buffer.create_producer();
+ * LockLessRingBufferWrite r_buffer_producer_3 = r_buffer.create_producer();
+ * @endcode
+ * */
+// clang-format on
+template <class Tptr, class Uarr, size_t U_size>
+  requires PowerOfTwo<U_size>
+class LockLessRingBufferMemInit {
+  using atomic_T = std::atomic<Tptr>;
+  using U_ptr = Uarr *;
+  using R_Buff = RingBufferMemAllocation<Tptr, Uarr, U_size>;
+
+private:
+  atomic_T *read_head;   ///< The read atomic pointer.
+  atomic_T *write_head;  ///< The write atomic pointer.
+  atomic_T *commit_head; ///< The commit atomic pointer.
+  U_ptr array; ///< The array where the elements in the ring buffer are stored.
+  size_t size = U_size;
+  void *mem_ptr;
+  mutable bool reader_done; ///< Keeps track of whether a conumer was created.
+
+  LockLessRingBufferMemInit() {}
+
+public:
+  /**
+   * @brief Defines the constructor. If memory is not created, this will fail.
+   * @return The an std::optional containing LockLessRingBufferMemInit class on
+   * success, or std::nullopt on failure.
+   * */
+  static std::optional<LockLessRingBufferMemInit> create() {
+    void *mem_ptr = mmap(NULL, sizeof(R_Buff), PROT_READ | PROT_WRITE,
+                         MAP_SHARED | MAP_ANON, -1, 0);
+    if (mem_ptr == MAP_FAILED) {
+      perror("Error has successfully occured while mmaping :)");
+      return {};
+    }
+    LockLessRingBufferMemInit r_buffer;
+    R_Buff *temp = reinterpret_cast<R_Buff *>(
+        mem_ptr); // This thing destructs at the end of it but the pointers
+                  // should work
+    r_buffer.read_head = &(temp->read_head);
+    r_buffer.write_head = &(temp->write_head);
+    r_buffer.commit_head = &(temp->commit_head);
+    r_buffer.array = temp->data;
+    return r_buffer;
+  }
+  /**
+   * @brief Creates the consumer class of the lockless ring buffer if there
+   * doesn't already exist one.
+   * @return std::optional containing the @ref LockLessRingBufferRead if @ref
+   * reader_done is not set, else return std::nullopt
+   * */
+  std::optional<LockLessRingBufferRead<Tptr, Uarr, U_size>> create_consumer() {
+    if (reader_done)
+      return {};
+    reader_done = true;
+    return LockLessRingBufferRead<Tptr, Uarr, U_size>(read_head, commit_head,
+                                                      array);
+  }
+  /**
+   * @brief Creates the producer class of the lockless ring buffer
+   * @return The @ref LockLessRingBufferWrite class.
+   * */
+  LockLessRingBufferWrite<Tptr, Uarr, U_size> create_producer() {
+    return LockLessRingBufferWrite<Tptr, Uarr, U_size>(read_head, write_head,
+                                                       commit_head, array);
+  }
+  ~LockLessRingBufferMemInit() { munmap(mem_ptr, sizeof(R_Buff)); }
+};
+/** @} */ // end of the Static_Memctrl_Lockless_RingBuffer_Module
