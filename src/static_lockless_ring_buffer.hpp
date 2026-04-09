@@ -44,6 +44,7 @@ concept PowerOfTwo = N > 0 && (N & (N - 1)) == 0;
  * version of <b>lockless ring buffer</b>
  * @{
  */
+
 /**
  * @class LockLessRingBufferRead
  * @brief This class defines the @b consumer end of the lockless ring buffer.

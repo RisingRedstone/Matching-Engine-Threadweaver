@@ -16,15 +16,16 @@
 
 #include "static_lockless_ring_buffer.hpp"
 
+// clang-format off
 /**
- * @defgroup Static_Memctrl_Lockless_RingBuffer_Module Static Memory Controlled Ring Buffer ADT
- * Ring Buffer ADT Lockless Ring Buffer ADT
+ * @defgroup Static_Memctrl_Lockless_RingBuffer_Module Static Memory Controlled Lockless Ring Buffer ADT
  * @brief This module is a memory controlled extension of @ref
  * Static_Lockless_RingBuffer_Module. Here ths memory is allocated and managed
  * by @ref LockLessRingBufferMemInit class itself
  *
  * @{
  */
+// clang-format on
 
 /**
  * @brief A helper struct to allocate memory pages and memory mapping the
@@ -119,8 +120,7 @@ public:
     }
     LockLessRingBufferMemInit r_buffer;
     R_Buff *temp = reinterpret_cast<R_Buff *>(
-        mem_ptr); // This thing destructs at the end of it but the pointers
-                  // should work
+        mem_ptr); 
     r_buffer.read_head = &(temp->read_head);
     r_buffer.write_head = &(temp->write_head);
     r_buffer.commit_head = &(temp->commit_head);

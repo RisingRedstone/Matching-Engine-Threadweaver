@@ -19,9 +19,11 @@ target_include_directories(engine_logic INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/sr
 add_executable(${PROJECT_NAME} src/main.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE engine_logic)
 
+# Ring Buffer Test
 add_executable(ring_buffer_test tests/ring_buffer_test.cpp)
 target_link_libraries(ring_buffer_test PRIVATE engine_logic)
 
+# Test files
 add_test(NAME RingBufferTest COMMAND ring_buffer_test)
 
 # 5. Optional: Compiler Warnings
