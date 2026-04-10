@@ -114,6 +114,7 @@ public:
     if (c_h <= r_h)
       return {};
     Uarr output = array[r_h & (size - 1)];
+    // The read_head only needs to move AFTER the output has been fetched
     read_head->fetch_add(1, std::memory_order_release);
     return output;
   }
@@ -201,10 +202,34 @@ public:
                                                 std::memory_order_release));
 
     array[w_h & (size - 1)] = item;
-    while (!commit_head->compare_exchange_weak(w_h, w_h + 1,
-                                               std::memory_order_release))
-      ;
+    // The commit_head needs to move only AFTER the array has been written to.
+    Tptr expected = w_h;
+    while (!commit_head->compare_exchange_weak(expected, w_h + 1,
+                                               std::memory_order_release)) {
+      expected = w_h;
+    }
+
     return true;
+    // Bruh I go why this would also create major problems..
+    // Me so stupid
+    // This code is stupid and not to be used at all
+    // Tptr w_h = write_head->fetch_add(1, std::memory_order_release);
+    // Tptr r_h = read_head->load(std::memory_order_acquire);
+    //
+    // if (w_h - r_h >= size) {
+    //   write_head->fetch_sub(1, std::memory_order_release);
+    //   return false;
+    // }
+    //
+    // array[w_h & (size - 1)] = item;
+    //
+    // // commit_head->fetch_add(1, std::memory_order_release);
+    // Tptr expected = w_h;
+    // while (!commit_head->compare_exchange_weak(expected, w_h + 1,
+    //                                            std::memory_order_release)) {
+    //   expected = w_h;
+    // }
+    // return true;
   }
 };
 

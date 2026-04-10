@@ -113,14 +113,13 @@ public:
    * */
   static std::optional<LockLessRingBufferMemInit> create() {
     void *mem_ptr = mmap(NULL, sizeof(R_Buff), PROT_READ | PROT_WRITE,
-                         MAP_SHARED | MAP_ANON, -1, 0);
+                         MAP_SHARED | MAP_ANON | MAP_HUGE_2MB, -1, 0);
     if (mem_ptr == MAP_FAILED) {
       perror("Error has successfully occured while mmaping :)");
       return {};
     }
     LockLessRingBufferMemInit r_buffer;
-    R_Buff *temp = reinterpret_cast<R_Buff *>(
-        mem_ptr); 
+    R_Buff *temp = reinterpret_cast<R_Buff *>(mem_ptr);
     r_buffer.read_head = &(temp->read_head);
     r_buffer.write_head = &(temp->write_head);
     r_buffer.commit_head = &(temp->commit_head);

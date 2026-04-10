@@ -17,8 +17,9 @@
 using ull = unsigned long long int;
 using atomic_ull = std::atomic<ull>;
 
-const int num_of_writers = 4;
-const unsigned int data_size = 1024;
+const int num_of_writers = 8;
+const unsigned int data_size = 65536 * 32;
+const int write_numbers = 80000 * 16;
 
 #if MEM_CTRL == 1
 typedef struct {
@@ -93,6 +94,10 @@ int main() {
 
   int status;
   waitpid(reader_pid, &status, 0);
+  if (status != 0) {
+    perror("I guess the reader failed\n");
+    return -1;
+  }
   for (int i = 0; i < num_of_writers; i++)
     waitpid(writer_pids[i], &status, 0);
 
@@ -113,11 +118,13 @@ void thread_yield_waiter(int attempt) {
     std::this_thread::sleep_for(std::chrono::microseconds(10));
   }
 }
+
 void ReaderChildProcess(LockLessRingBufferRead<ull, int, data_size> r_buffer) {
-  const int take_numbers = 6096;
-  int show_module[take_numbers];
+  const int take_numbers = write_numbers * num_of_writers;
+  int *show_module = new int[take_numbers](0);
   int i = 0;
   int attempts = 0;
+  std::cout << "Starting Read" << std::endl;
   while (i < take_numbers) {
     std::optional<int> cons = r_buffer.read();
     if (cons.has_value()) {
@@ -127,17 +134,38 @@ void ReaderChildProcess(LockLessRingBufferRead<ull, int, data_size> r_buffer) {
       show_module[i] = val;
       i++;
     } else {
-      if (i > 0) {
-        std::cout << "Reader: Till Now, got " << i << " numbers" << std::endl;
-      }
       attempts++;
       thread_yield_waiter(attempts);
     }
   }
+
+  // Check if all numbers are there
+  std::cout << "Checking numbers: " << std::endl;
+  int *check_numbers = new int[take_numbers](0);
+  for (int i = 0; i < take_numbers; i++) {
+    check_numbers[show_module[i]] += 1;
+  }
+
+  int not_founds = 0;
+  for (int i = 0; i < take_numbers; i++) {
+    // not_founds += !check_numbers[i];
+    if (check_numbers[i] != 1) {
+      // print the error
+      std::cout << "This number " << i << "\t got " << check_numbers[i]
+                << " values" << std::endl;
+      not_founds += 1;
+    }
+  }
+  if (not_founds > 0) {
+    std::cout << not_founds << " Not Found" << std::endl;
+    exit(1);
+  } else {
+    std::cout << "All Found" << std::endl;
+  }
+  exit(0);
 }
 void WriterChildProcess(LockLessRingBufferWrite<ull, int, data_size> w_buffer,
                         int n) {
-  const int write_numbers = 1524;
   int i = 0;
   int attempts = 0;
   while (i < write_numbers) {
@@ -149,4 +177,5 @@ void WriterChildProcess(LockLessRingBufferWrite<ull, int, data_size> w_buffer,
       thread_yield_waiter(attempts);
     }
   }
+  exit(0);
 }
