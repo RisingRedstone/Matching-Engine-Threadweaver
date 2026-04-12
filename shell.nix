@@ -17,6 +17,13 @@ pkgs.mkShell {
     # Utils
     gdb
     valgrind # Great for debugging memory in matching engines
+
+    linuxPackages.perf
+    hotspot # GUI for perf data
+    flamegraph
+    kdePackages.kcachegrind
+    lttng-ust
+    lttng-tools
   ];
 
   shellHook = ''
@@ -53,5 +60,9 @@ pkgs.mkShell {
     else
       alias view_docs="xdg-open docs/html/index.html >/dev/null 2>&1 &"
     fi
+
+    # Test this one
+    alias valgrind_prof="mkdir -p .profile && valgrind --tool=callgrind --callgrind-out-file=.profile/callgrind.out.%p --separate-threads=yes --trace-children=yes --dump-instr=yes --collect-jumps=yes --simulate-cache=yes --simulate-hwpref=yes"
+    alias perf_prof="mkdir -p .profile && sudo perf record -e cache-references,cache-misses,L1-dcache-load-misses -g -o ./.profile/perf.data"
   '';
 }

@@ -23,6 +23,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE engine_logic)
 add_executable(ring_buffer_test tests/ring_buffer_test.cpp)
 target_link_libraries(ring_buffer_test PRIVATE engine_logic)
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if(NOT MSVC)
+        target_compile_options(engine_logic INTERFACE -g -O3 -fno-omit-frame-pointer)
+        target_compile_options(ring_buffer_test PRIVATE -g -O3 -fno-omit-frame-pointer)
+    endif()
+endif()
+
 # Test files
 add_test(NAME RingBufferTest COMMAND ring_buffer_test)
 
