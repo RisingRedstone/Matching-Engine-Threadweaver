@@ -99,6 +99,10 @@ public:
     r_buffer.size = 0;
   }
 
+  void prefetch_with_offset(int location) {
+    __builtin_prefetch(&array[location & (size - 1)], 0, 3);
+  }
+
   /**
    * @brief Defines the funtion that reads any commited values from the lockless
    * ring buffer.
@@ -113,8 +117,14 @@ public:
     Tptr c_h = commit_head->load(std::memory_order_acquire);
     if (c_h <= r_h)
       return {};
+
     Uarr output = array[r_h & (size - 1)];
+    // prefetch_with_offset(r_h + 1); // prefetch the next one before-hand.
+    // Probably wont work since the reads are not the bottleneck here.
+
     // The read_head only needs to move AFTER the output has been fetched
+    // This std::memory_order_release is used to define that on arm systems
+    // Not required on x86 as its a strong ordered architecture.
     read_head->fetch_add(1, std::memory_order_release);
     return output;
   }
@@ -190,7 +200,7 @@ public:
    * @return True if the insertion was successful, False otherwise (reached max
    * size).
    */
-  bool write(Uarr item) {
+  bool write(const Uarr &item) {
     Tptr w_h;
     do {
       Tptr r_h = read_head->load(std::memory_order_acquire);
@@ -205,31 +215,12 @@ public:
     // The commit_head needs to move only AFTER the array has been written to.
     Tptr expected = w_h;
     while (!commit_head->compare_exchange_weak(expected, w_h + 1,
-                                               std::memory_order_release)) {
+                                               std::memory_order_release,
+                                               std::memory_order_relaxed)) {
       expected = w_h;
     }
 
     return true;
-    // Bruh I go why this would also create major problems..
-    // Me so stupid
-    // This code is stupid and not to be used at all
-    // Tptr w_h = write_head->fetch_add(1, std::memory_order_release);
-    // Tptr r_h = read_head->load(std::memory_order_acquire);
-    //
-    // if (w_h - r_h >= size) {
-    //   write_head->fetch_sub(1, std::memory_order_release);
-    //   return false;
-    // }
-    //
-    // array[w_h & (size - 1)] = item;
-    //
-    // // commit_head->fetch_add(1, std::memory_order_release);
-    // Tptr expected = w_h;
-    // while (!commit_head->compare_exchange_weak(expected, w_h + 1,
-    //                                            std::memory_order_release)) {
-    //   expected = w_h;
-    // }
-    // return true;
   }
 };
 
