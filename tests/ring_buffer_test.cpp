@@ -1,12 +1,18 @@
 
+#include "../src/common/memory/cache_line.hpp"
 #include <atomic>
 #include <cstdio>
 #include <iostream>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
+#include <x86intrin.h>
 
+#define PROFILING 1
+#define PREFETCHING 1
+#define TEST_CHECK 1
 #define MEM_CTRL 0
 
 #if MEM_CTRL == 0
@@ -14,12 +20,14 @@
 #else
 #include "../src/static_lockless_ring_buffer.hpp"
 #endif
+
 using ull = unsigned long long int;
 using atomic_ull = std::atomic<ull>;
 
 const int num_of_writers = 8;
-const unsigned int data_size = 65536 * 32;
-const int write_numbers = 80000 * 16;
+const unsigned int data_size = 65536 * 2;
+const int write_numbers = 80000 * 128;
+using buffer_data_type = engine::memory::CacheLinePacked<int>;
 
 #if MEM_CTRL == 1
 typedef struct {
@@ -31,14 +39,22 @@ typedef struct {
 } RingBufferAllocation;
 #endif
 
-void ReaderChildProcess(LockLessRingBufferRead<ull, int, data_size>);
-void WriterChildProcess(LockLessRingBufferWrite<ull, int, data_size>, int);
+void ReaderChildProcess(
+    LockLessRingBufferRead<ull, buffer_data_type, data_size>);
+void WriterChildProcess(
+    LockLessRingBufferWrite<ull, buffer_data_type, data_size>, int);
 
 int main() {
   // make the memory
 #if MEM_CTRL == 0
-  auto r_buffer =
-      LockLessRingBufferMemInit<ull, int, data_size>::create().value();
+  auto r_buffer_opt =
+      LockLessRingBufferMemInit<ull, buffer_data_type, data_size>::create();
+  if (!r_buffer_opt.has_value()) {
+    perror("Could Not allocate memory for the buffer");
+    return -1;
+  }
+  // auto r_buffer = r_buffer_opt.value();
+  auto r_buffer = std::move(*r_buffer_opt);
 #else
   void *ptr = mmap(NULL, sizeof(RingBufferAllocation), PROT_READ | PROT_WRITE,
                    MAP_SHARED | MAP_ANON, -1, 0);
@@ -54,7 +70,6 @@ int main() {
       &buff_alloc->read_head, &buff_alloc->write_head, &buff_alloc->commit_head,
       buff_alloc->data);
 #endif
-
   int reader_pid;
 
   // get the read lockless buffer
@@ -119,28 +134,75 @@ void thread_yield_waiter(int attempt) {
   }
 }
 
-void ReaderChildProcess(LockLessRingBufferRead<ull, int, data_size> r_buffer) {
+void ReaderChildProcess(
+    LockLessRingBufferRead<ull, buffer_data_type, data_size> r_buffer) {
+
+  // try locking to the 0th core
+  cpu_set_t set;
+  CPU_ZERO(&set); // Initialize to zero
+  CPU_SET(0, &set);
+  if (sched_setaffinity(0, sizeof(set), &set) == -1) {
+    std::cout << "Could not lock" << std::endl;
+  }
+
   const int take_numbers = write_numbers * num_of_writers;
-  int *show_module = new int[take_numbers](0);
+  ull *show_module = new ull[take_numbers](0);
   int i = 0;
   int attempts = 0;
+  ull failed_attempts = 0;
   std::cout << "Starting Read" << std::endl;
+
+#if PROFILING == 1
+  unsigned int aux;
+  ull start = __rdtscp(&aux);
+  ull total_null_time = 0;
+#elif PROFILING == 2
+  prctl(PR_TASK_PERF_EVENTS_ENABLE, 0, 0, 0, 0);
+#endif
+
   while (i < take_numbers) {
-    std::optional<int> cons = r_buffer.read();
+#if PREFETCHING == 1
+    __builtin_prefetch(&show_module[i + 16], 1, 3);
+#endif
+    std::optional<buffer_data_type> cons = r_buffer.read();
     if (cons.has_value()) {
+
+      failed_attempts += attempts;
       attempts = 0;
 
-      int val = cons.value();
-      show_module[i] = val;
-      i++;
+      buffer_data_type val = cons.value();
+      for (int j = 0; j < val.atom.counter; j++) {
+        // Use vector instructions later here
+        show_module[i] = val.atom.data[j];
+        i++;
+      }
     } else {
+#if PROFILING == 1
+      ull inner_start = __rdtscp(&aux);
       attempts++;
       thread_yield_waiter(attempts);
+      total_null_time += __rdtscp(&aux) - inner_start;
+#else
+      attempts++;
+      thread_yield_waiter(attempts);
+#endif
     }
   }
 
+#if PROFILING == 1
+  std::cout << "Reader: Failed attempts: " << failed_attempts
+            << "\tTotal i: " << i << std::endl;
+  ull total_time = __rdtscp(&aux) - start - total_null_time;
+  std::cout << "Reader: Total cycles: " << total_time
+            << "\tLoops: " << take_numbers << "\tcycles per loop: "
+            << (double)total_time / (double)take_numbers << std::endl;
+#elif PROFILING == 2
+  prctl(PR_TASK_PERF_EVENTS_DISABLE, 0, 0, 0, 0);
+#endif
+
+#if TEST_CHECK == 1
   // Check if all numbers are there
-  std::cout << "Checking numbers: " << std::endl;
+  std::cout << "Checking numbers" << std::endl;
   int *check_numbers = new int[take_numbers](0);
   for (int i = 0; i < take_numbers; i++) {
     check_numbers[show_module[i]] += 1;
@@ -162,20 +224,62 @@ void ReaderChildProcess(LockLessRingBufferRead<ull, int, data_size> r_buffer) {
   } else {
     std::cout << "All Found" << std::endl;
   }
-  exit(0);
+  delete[] check_numbers;
+#endif
+  delete[] show_module;
 }
-void WriterChildProcess(LockLessRingBufferWrite<ull, int, data_size> w_buffer,
-                        int n) {
-  int i = 0;
+void WriterChildProcess(
+    LockLessRingBufferWrite<ull, buffer_data_type, data_size> w_buffer, int n) {
+#if PROFILING == 2
+  prctl(PR_TASK_PERF_EVENTS_DISABLE, 0, 0, 0, 0);
+#endif
+  size_t i = 0;
   int attempts = 0;
+  ull writer_failed_attempts = 0;
+#if PROFILING == 1
+  unsigned int aux;
+  ull start = __rdtscp(&aux);
+  ull total_null_time = 0;
+#endif
+
+  const auto index = [&](const int &a) { return a + (n * write_numbers); };
+  buffer_data_type next;
+  next.atom.counter = std::min((size_t)write_numbers - i, next.atom.max_elems);
+  for (int c = 0; c < next.atom.counter; c++) {
+    next.atom.data[c] = index(i + c);
+  }
+
   while (i < write_numbers) {
-    if (w_buffer.write(i + (n * write_numbers))) {
+    if (w_buffer.write(next)) {
+#if PROFILING == 1
+      writer_failed_attempts += attempts;
+#endif
       attempts = 0;
-      i++;
+      i += next.atom.counter;
+      next.atom.counter = std::min(write_numbers - i, next.atom.max_elems);
+      for (int c = 0; c < next.atom.counter; c++) {
+        next.atom.data[c] = index(i + c);
+      }
     } else {
+#if PROFILING == 1
+      ull inner_start = __rdtscp(&aux);
       attempts++;
       thread_yield_waiter(attempts);
+      total_null_time += __rdtscp(&aux) - inner_start;
+#else
+      attempts++;
+      thread_yield_waiter(attempts);
+#endif
     }
   }
-  exit(0);
+#if PROFILING == 1
+  std::cout << "Writer " << n << ": "
+            << "Failed attempts: " << writer_failed_attempts
+            << "\tTotal i: " << i << std::endl;
+  ull total_time = __rdtscp(&aux) - start - total_null_time;
+  std::cout << "Writer " << n << ": "
+            << "Total cycles: " << total_time << "\tLoops: " << write_numbers
+            << "\tcycles per loop: "
+            << (double)total_time / (double)write_numbers << std::endl;
+#endif
 }
