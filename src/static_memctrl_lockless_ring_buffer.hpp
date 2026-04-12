@@ -7,8 +7,10 @@
  * Ring Buffer.
  * */
 
+#include <array>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <sys/mman.h>
 #include <sys/wait.h>
@@ -101,11 +103,51 @@ private:
   U_ptr array; ///< The array where the elements in the ring buffer are stored.
   size_t size = U_size;
   void *mem_ptr;
-  mutable bool reader_done; ///< Keeps track of whether a conumer was created.
+  mutable bool reader_done; ///< Keeps track of whether a consumer was created.
 
-  LockLessRingBufferMemInit() {}
+  /**
+   * @brief This is the class constructor.
+   * @param read_head The atomic pointer to the read_head.
+   * @param write_head The atomic pointer to the write_head.
+   * @param commit_head The atomic pointer to the commit_head.
+   * @param array The pointer to the ring buffer memory.
+   * @param mem_ptr The entire memory page that stores the array and the atomic
+   *  pointers.
+   * @note This is intentionally left private as this class needs a shared
+   * memory map and it is recommended to use the @ref create() function instead.
+   * */
+  LockLessRingBufferMemInit(atomic_T *read_head, atomic_T *write_head,
+                            atomic_T *commit_head, U_ptr array, void *mem_ptr)
+      : read_head(read_head), write_head(write_head), commit_head(commit_head),
+        array(array), mem_ptr(mem_ptr) {
+    read_head->store(0, std::memory_order_release);
+    write_head->store(0, std::memory_order_release);
+    commit_head->store(0, std::memory_order_release);
+  }
 
 public:
+  /**
+   * @brief This class cannot be copied.
+   * */
+  LockLessRingBufferMemInit(LockLessRingBufferMemInit &) = delete;
+
+  /**
+   * @brief Defines the move constructor.
+   * */
+  LockLessRingBufferMemInit(LockLessRingBufferMemInit &&r_value) {
+    read_head = r_value.read_head;
+    write_head = r_value.write_head;
+    commit_head = r_value.commit_head;
+    array = r_value.array;
+    mem_ptr = r_value.mem_ptr;
+
+    r_value.read_head = nullptr;
+    r_value.write_head = nullptr;
+    r_value.commit_head = nullptr;
+    r_value.array = nullptr;
+    r_value.mem_ptr = nullptr;
+  }
+
   /**
    * @brief Defines the constructor. If memory is not created, this will fail.
    * @return The an std::optional containing LockLessRingBufferMemInit class on
@@ -113,17 +155,14 @@ public:
    * */
   static std::optional<LockLessRingBufferMemInit> create() {
     void *mem_ptr = mmap(NULL, sizeof(R_Buff), PROT_READ | PROT_WRITE,
-                         MAP_SHARED | MAP_ANON | MAP_HUGE_2MB, -1, 0);
+                         MAP_SHARED | MAP_ANON, -1, 0);
     if (mem_ptr == MAP_FAILED) {
-      perror("Error has successfully occured while mmaping :)");
       return {};
     }
-    LockLessRingBufferMemInit r_buffer;
     R_Buff *temp = reinterpret_cast<R_Buff *>(mem_ptr);
-    r_buffer.read_head = &(temp->read_head);
-    r_buffer.write_head = &(temp->write_head);
-    r_buffer.commit_head = &(temp->commit_head);
-    r_buffer.array = temp->data;
+    LockLessRingBufferMemInit r_buffer(&(temp->read_head), &(temp->write_head),
+                                       &(temp->commit_head), temp->data,
+                                       mem_ptr);
     return r_buffer;
   }
   /**
@@ -147,6 +186,14 @@ public:
     return LockLessRingBufferWrite<Tptr, Uarr, U_size>(read_head, write_head,
                                                        commit_head, array);
   }
-  ~LockLessRingBufferMemInit() { munmap(mem_ptr, sizeof(R_Buff)); }
+
+  /**
+   * @brief Destroys the allocated memory pages at the end of its lifetime.
+   * * This is why this class should not be copied.
+   * */
+  ~LockLessRingBufferMemInit() {
+    if (mem_ptr != nullptr)
+      munmap(mem_ptr, sizeof(R_Buff));
+  }
 };
 /** @} */ // end of the Static_Memctrl_Lockless_RingBuffer_Module
