@@ -1,6 +1,5 @@
 
 #include <atomic>
-#include <iostream>
 #include <optional>
 #include <sched.h>
 #include <sys/mman.h>

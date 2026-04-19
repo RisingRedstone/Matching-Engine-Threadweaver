@@ -11,6 +11,7 @@
 #include "../src/allocators/one_time_static_allocator.hpp"
 #include "../src/buffer/buffer.hpp"
 #include "../src/buffer/layouts/lockless_ring_buffer_layout.hpp"
+#include "../src/buffer/ring/cell_lockable_approach.hpp"
 #include "../src/buffer/ring/three_pointer_approach.hpp"
 #include "../src/buffer/scmp.hpp"
 #include "../src/common/memory/cache_line.hpp"
@@ -29,17 +30,29 @@ using ull = unsigned long long;
 template <typename Layout>
 using Allocator =
     engine::allocators::OneTimeStaticSharedMemoryAllocator<Layout>;
-using data_type = engine::memory::CacheLinePacked<int, uint8_t>;
-using Layout = engine::buffer::layout::StaticLockLessRingBufferLayout<
-    data_type, buffer_size, Allocator>;
+
+// using data_type = engine::memory::CacheLinePacked<int, uint8_t>;
+// using Layout = engine::buffer::layout::StaticLockLessRingBufferLayout<
+//     data_type, buffer_size, Allocator>;
+// template <typename Layout>
+// using ProducerFactory = engine::buffer::scmp::Factory::ProducerFactory<
+//     engine::buffer::ring::three_pointer_approach::Producer, Layout>;
+// template <typename Layout>
+// using ConsumerFactory = engine::buffer::scmp::Factory::ConsumerFactory<
+//     engine::buffer::ring::three_pointer_approach::Consumer, Layout>;
+
+using data_type = engine::memory::CacheLineUint8LengthHeaderPacked<int>;
+using Layout =
+    engine::buffer::layout::StaticLockLessRingBufferCellLockableLayout<
+        data_type, buffer_size, Allocator>;
 template <typename Layout>
 using ProducerFactory = engine::buffer::scmp::Factory::ProducerFactory<
-    engine::buffer::ring::three_pointer_approach::Producer, Layout>;
+    engine::buffer::ring::cell_lockable_approach::ProducerConsumer, Layout>;
 template <typename Layout>
 using ConsumerFactory = engine::buffer::scmp::Factory::ConsumerFactory<
-    engine::buffer::ring::three_pointer_approach::Consumer, Layout>;
-using Buffer = engine::buffer::Buffer<ProducerFactory, ConsumerFactory, Layout>;
+    engine::buffer::ring::cell_lockable_approach::ProducerConsumer, Layout>;
 
+using Buffer = engine::buffer::Buffer<ProducerFactory, ConsumerFactory, Layout>;
 using Consumer = ConsumerFactory<Layout>::Consumer;
 using Producer = ProducerFactory<Layout>::Producer;
 using buffer_data_type = Consumer::data_type;
@@ -90,9 +103,13 @@ void ConsumerProcess(Consumer consumer) {
       attempts = 0;
 
       buffer_data_type val = std::move(cons.value());
-      for (int j = 0; j < val.atom.counter; j++) {
+
+      // std::cout << "Reader: Got" << (int)val.get_length() << " values"
+      //           << std::endl;
+
+      for (int j = 0; j < val.get_length(); j++) {
         // Use vector instructions later here
-        show_module[i] = val.atom.data[j];
+        show_module[i] = val[j];
         i++;
       }
     } else {
@@ -163,9 +180,10 @@ void ProducerProcess(Producer producer, int n) {
 
   const auto index = [&](const int &a) { return a + (n * write_numbers); };
   buffer_data_type next;
-  next.atom.counter = std::min((size_t)write_numbers - i, next.atom.max_elems);
-  for (int c = 0; c < next.atom.counter; c++) {
-    next.atom.data[c] = index(i + c);
+  next.header() = 1;
+  next.get_length() = std::min((size_t)write_numbers - i, next.max_elems);
+  for (int c = 0; c < next.get_length(); c++) {
+    next[c] = index(i + c);
   }
 
   while (i < write_numbers) {
@@ -174,10 +192,16 @@ void ProducerProcess(Producer producer, int n) {
       writer_failed_attempts += attempts;
 #endif
       attempts = 0;
-      i += next.atom.counter;
-      next.atom.counter = std::min(write_numbers - i, next.atom.max_elems);
-      for (int c = 0; c < next.atom.max_elems; c++) {
-        next.atom.data[c] = index(i + c);
+      i += next.get_length();
+
+#if PROFILING == 1
+      // std::cout << "Writer " << n << ": sent " << (int)next.get_length()
+      //           << " values" << std::endl;
+#endif
+      next.header() = 1;
+      next.get_length() = std::min(write_numbers - i, next.max_elems);
+      for (int c = 0; c < next.max_elems; c++) {
+        next[c] = index(i + c);
       }
     } else {
 #if PROFILING == 1
