@@ -119,7 +119,7 @@ private:
   LockLessRingBufferMemInit(atomic_T *read_head, atomic_T *write_head,
                             atomic_T *commit_head, U_ptr array, void *mem_ptr)
       : read_head(read_head), write_head(write_head), commit_head(commit_head),
-        array(array), mem_ptr(mem_ptr) {
+        array(array), mem_ptr(mem_ptr), reader_done(false) {
     read_head->store(0, std::memory_order_release);
     write_head->store(0, std::memory_order_release);
     commit_head->store(0, std::memory_order_release);
@@ -140,6 +140,7 @@ public:
     commit_head = r_value.commit_head;
     array = r_value.array;
     mem_ptr = r_value.mem_ptr;
+    reader_done = r_value.reader_done;
 
     r_value.read_head = nullptr;
     r_value.write_head = nullptr;
