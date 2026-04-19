@@ -3,5 +3,13 @@
 /bin/release/*
 /docs/*
 /.profile
+/CMakeFiles
+CTestTestfile.cmake
+CMakeDoxyfile.in
+CMakeCache.txt
+CMakeDoxygenDefaults.cmake
+Makefile
+cmake_install.cmake
 compile_commands.json
 temp.sh
+.clangd

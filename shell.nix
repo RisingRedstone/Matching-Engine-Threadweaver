@@ -77,6 +77,7 @@ pkgs.mkShell {
     # Configuration (Auto-cleaning build to prevent cache conflicts)
     alias config_debug="clean_build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && ln -sf build/compile_commands.json"
     alias config_release="clean_build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && ln -sf build/compile_commands.json"
+    alias config_release_s="clean_build && cmake -DCMAKE_CXX_FLAGS=\"-save-temps\" -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && ln -sf build/compile_commands.json"
 
     # Build helpers
     alias run_build="cmake --build build -j$(nproc)"

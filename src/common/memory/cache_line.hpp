@@ -72,7 +72,6 @@ struct alignas(cache_line_size) CacheLineSlot {
  * @tparam Header The header type for the slot.
  */
 template <class D, class Header = uint8_t>
-  requires std::is_trivially_copyable_v<D>
 union alignas(cache_line_size) CacheLinePacked {
   /** @brief Raw representation of the cache line for fast copying. */
   using raw_type = std::array<uint64_t, cache_line_size / sizeof(uint64_t)>;
@@ -85,6 +84,8 @@ union alignas(cache_line_size) CacheLinePacked {
 
   /** @brief Default constructor. Initializes raw memory to zero. */
   CacheLinePacked() : raw{} {}
+
+  CacheLinePacked(const raw_type& data) noexcept : raw(data) {}
   /** @brief Copy constructor using raw memory assignment. */
   CacheLinePacked(const CacheLinePacked &other) noexcept {
     this->raw = other.raw;
