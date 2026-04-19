@@ -3,4 +3,5 @@
 /bin/release/*
 /docs/*
 /.profile
+compile_commands.json
 temp.sh

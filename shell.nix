@@ -19,11 +19,15 @@ pkgs.mkShell {
     valgrind # Great for debugging memory in matching engines
 
     linuxPackages.perf
+    gprof2dot
     hotspot # GUI for perf data
     flamegraph
     kdePackages.kcachegrind
     lttng-ust
     lttng-tools
+    liburcu
+    pkg-config
+    babeltrace2
   ];
 
   shellHook = ''
@@ -33,6 +37,30 @@ pkgs.mkShell {
     echo "--- Matching Engine Dev Environment ---"
     echo "GCC:   $(g++ --version | head -n 1)"
     echo "Clang: $(clang++ --version | head -n 1)"
+    echo "LTTng-UST development environment loaded."
+    # Optional: Ensure the lttng-sessiond can find the libraries
+    export LD_LIBRARY_PATH="${pkgs.lttng-ust}/lib:$LD_LIBRARY_PATH"
+
+    # --- THE FIX FOR CLANGD ---
+    # This tells the compiler (and clangd) where to look for headers 
+    # without needing to hardcode store paths.
+    export CPATH="${pkgs.liburcu}/include:${pkgs.lttng-ust}/include:$CPATH"
+    export CPLUS_INCLUDE_PATH="${pkgs.liburcu}/include:${pkgs.lttng-ust}/include:$CPLUS_INCLUDE_PATH"
+    export LD_LIBRARY_PATH="${pkgs.liburcu}/lib:${pkgs.lttng-ust}/lib:$LD_LIBRARY_PATH"
+
+    echo "--- Matching Engine Dev Environment ---"
+    echo "LTTng-UST paths exported for LSP."
+
+    # --- AUTOMATIC COMPILE COMMANDS ---
+    # This automatically generates the 'map' clangd needs if you use CMake
+    #if [ -f CMakeLists.txt ]; then
+    #    echo "Generating compilation database for clangd..."
+    #    cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON > /dev/null
+    #    # Link it to the root so clangd finds it immediately
+    #    ln -sf build/compile_commands.json .
+    #fi
+    # --------------------------
+
     echo "---------------------------------------"
 
     # Helpers to switch compilers on the fly
@@ -40,14 +68,15 @@ pkgs.mkShell {
     alias use-clang="export CC=clang && export CXX=clang++ && echo 'Switched to Clang'"
 
     # Cleaning
+    alias clean_compile_commands="rm compile_commands.json"
     alias clean_build="rm -rf build/"
     alias clean_bin="rm -rf bin/"
     alias clean_docs="rm -rf docs/"
-    alias clean_all="clean_build && clean_bin && clean_docs"
+    alias clean_all="clean_build && clean_bin && clean_docs && clean_compile_commands"
 
     # Configuration (Auto-cleaning build to prevent cache conflicts)
-    alias config_debug="clean_build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug"
-    alias config_release="clean_build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release"
+    alias config_debug="clean_build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && ln -sf build/compile_commands.json"
+    alias config_release="clean_build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && ln -sf build/compile_commands.json"
 
     # Build helpers
     alias run_build="cmake --build build -j$(nproc)"

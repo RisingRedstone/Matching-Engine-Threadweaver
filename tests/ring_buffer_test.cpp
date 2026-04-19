@@ -10,9 +10,9 @@
 #include <unistd.h>
 #include <x86intrin.h>
 
-#define PROFILING 1
+#define PROFILING 0
 #define PREFETCHING 1
-#define TEST_CHECK 1
+#define TEST_CHECK 0
 #define MEM_CTRL 0
 
 #if MEM_CTRL == 0
@@ -25,7 +25,7 @@ using ull = unsigned long long int;
 using atomic_ull = std::atomic<ull>;
 
 const int num_of_writers = 8;
-const unsigned int data_size = 65536 * 2;
+const unsigned int data_size = 65536 * 64;
 const int write_numbers = 80000 * 128;
 using buffer_data_type = engine::memory::CacheLinePacked<int>;
 
