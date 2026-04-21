@@ -75,9 +75,8 @@ public:
           _mm_pause();
           continue;
         }
-        write_head.fetch_add(
-            1, std::memory_order_relaxed); // the unlocking is
-                                           // memory_order_release so..
+        write_head.fetch_add(1, std::memory_order_relaxed); // the unlocking is
+        // memory_order_release so..
         **l_g_opt = item;
       }
       return true;

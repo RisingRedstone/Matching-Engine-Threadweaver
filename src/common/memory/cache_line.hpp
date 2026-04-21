@@ -118,11 +118,19 @@ union alignas(cache_line_size) CacheLinePacked {
   D &operator[](int i) { return atom.data[i]; }
 };
 
+/**
+ * @struct LengthHeader
+ * @brief Simple header containing a lock bit and a length counter.
+ */
 struct LengthHeader {
-  uint8_t header;
-  uint8_t length;
+  uint8_t header; // Used for locking
+  uint8_t length; // Elements currently in use
 };
 
+/**
+ * @brief Implementation of LockableCell using a packed cache line layout.
+ * This version tightly packs the header and data within 64 bytes.
+ */
 template <class D>
 struct alignas(cache_line_size) CacheLineUint8LengthHeaderPacked {
   using header_type = uint8_t;
@@ -172,6 +180,9 @@ struct alignas(cache_line_size) CacheLineUint8LengthHeaderPacked {
   }
 };
 
+/**
+ * @brief Cache-aligned union for raw block access or structured slot access.
+ */
 template <typename D> union alignas(cache_line_size) PackedCacheLine {
   using raw_type = std::array<uint64_t, cache_line_size / sizeof(uint64_t)>;
   using atom_type = std::array<D, cache_line_size / sizeof(D)>;
@@ -188,9 +199,13 @@ template <typename D> union alignas(cache_line_size) PackedCacheLine {
   D &operator[](const uint8_t &index) { return atom[index]; }
 };
 
+/**
+ * @brief Implementation of LockableCell that separates header and data into
+ * aligned blocks.
+ */
 template <class D> struct alignas(cache_line_size) CacheAlignedHeaderLine {
   alignas(cache_line_size) LengthHeader header;
-  PackedCacheLine<D> data;
+  alignas(cache_line_size) PackedCacheLine<D> data;
 
   using index_type = PackedCacheLine<D>::index_type;
   using data_type = D;
@@ -201,9 +216,9 @@ template <class D> struct alignas(cache_line_size) CacheAlignedHeaderLine {
   static constexpr size_t max_elems = PackedCacheLine<D>::max_elems;
 
   CacheAlignedHeaderLine() : header{}, data{} {}
-  CacheAlignedHeaderLine(const CacheAlignedHeaderLine &other) {
-    data = other.data;
-    header.length = other.header.length;
+  CacheAlignedHeaderLine(const CacheAlignedHeaderLine &other)
+      : data(other.data), header(other.header) {
+    header.header = HEADER_NOT_LOCKED;
   }
   CacheAlignedHeaderLine &operator=(const CacheAlignedHeaderLine &other) {
     data = other.data;
@@ -242,8 +257,3 @@ template <class D> struct alignas(cache_line_size) CacheAlignedHeaderLine {
 // template class CacheLineUint8LengthHeaderPacked<int>;
 
 } // namespace engine::memory
-
-// #include "../concepts/generic.hpp"
-// static_assert(
-//     engine::concepts::LockableCell<engine::memory::CacheAlignedHeaderLine<int>>,
-//     "Not true");

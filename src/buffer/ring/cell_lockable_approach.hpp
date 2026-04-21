@@ -1,15 +1,25 @@
 #pragma once
 
+/**
+ * @file cell_lockable_approach.hpp
+ * @brief Logic for a cell-lockable ring buffer where synchronization occurs at the individual element level.
+ */
+
 #include "../../common/concepts/generic.hpp"
 #include <atomic>
 
+/**
+ * @namespace engine::buffer::ring::cell_lockable_approach
+ * @brief Defines the ProducerConsumer unified class for the cell lockable approach.
+ */
 namespace engine::buffer::ring::cell_lockable_approach {
 
-// clang-format off
+/**
+ * @brief Validates the layout for the Cell-Lockable protocol.
+ * Requires atomic write and read heads, and consistent indexing types.
+ */
 template <typename Layout>
-concept LayoutVerification = requires(
-        Layout l
-) {
+concept LayoutVerification = requires(Layout l) {
   typename Layout::MemLayout;
   typename Layout::data_type;
   typename Layout::index_type;
@@ -19,14 +29,24 @@ concept LayoutVerification = requires(
   requires Layout::size > 0;
   requires std::convertible_to<decltype(Layout::size), size_t>;
 
-  requires std::same_as<typename Layout::MemLayout::index_type_a, std::atomic<typename Layout::index_type>>;
-  { l.get_write_head() } -> std::same_as<typename Layout::MemLayout::index_type_a &>;
-  { l.get_read_head() } -> std::same_as<typename Layout::MemLayout::index_type_a &>;
+  requires std::same_as<typename Layout::MemLayout::index_type_a,
+                        std::atomic<typename Layout::index_type>>;
+  {
+    l.get_write_head()
+  } -> std::same_as<typename Layout::MemLayout::index_type_a &>;
+  {
+    l.get_read_head()
+  } -> std::same_as<typename Layout::MemLayout::index_type_a &>;
 };
-// clang-format on
 
+/** @brief Tag type for the Cell-Lockable synchronization protocol. */
 struct CellLockableApproachProtocol;
 
+/**
+ * @brief A unified Producer-Consumer logic utilizing cell-level RAII guards.
+ * * This approach allows multiple producers to write simultaneously to different cells
+ * without a central "commit" bottleneck.
+ */
 template <typename LayoutType>
   requires LayoutVerification<LayoutType> &&
            concepts::ReadLockableIndex<LayoutType> &&
@@ -54,6 +74,11 @@ public:
   ProducerConsumer(ProducerConsumer &&r_value) = default;
   ProducerConsumer &operator=(ProducerConsumer &&r_value) = default;
 
+  /**
+   * @brief Reads data from the ring buffer.
+   * @details Claims the current read head, attempts to acquire the cell's read lock, 
+   * and advances the head regardless of cell content (cleaning up if empty).
+   */
   std::optional<data_type> read() {
     index_type_a &read_head = mem_layout.get_read_head();
     index_type_a &write_head = mem_layout.get_write_head();
@@ -76,6 +101,11 @@ public:
     return output;
   }
 
+  /**
+   * @brief Writes data to the ring buffer.
+   * @details Claims a write index via atomic increment. If the buffer is full, 
+   * it reverts the increment. Otherwise, it spins/retries until the cell is locked.
+   */
   bool write(const data_type &item) {
     index_type_a &read_head = mem_layout.get_read_head();
     index_type_a &write_head = mem_layout.get_write_head();

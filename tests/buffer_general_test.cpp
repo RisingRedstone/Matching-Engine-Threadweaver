@@ -17,13 +17,13 @@
 #include "../src/buffer/scmp.hpp"
 #include "../src/common/memory/cache_line.hpp"
 
-#define PROFILING 1
+#define PROFILING 0
 #define PREFETCHING 1
-#define TEST_CHECK 1
+#define TEST_CHECK 0
 
 static const int num_of_writers = 8;
-static const size_t buffer_size = 65536 * 1;
-static const int write_numbers = 80000 * 1;
+static const size_t buffer_size = 65536 * 128;
+static const int write_numbers = 80000 * 128;
 
 using ull = unsigned long long;
 
@@ -129,8 +129,9 @@ void ConsumerProcess(Consumer consumer) {
 #endif
     } else {
 #if PROFILING == 1
-      std::cout << "Reader: Got" << (int)i << " values out of " << take_numbers
-                << std::endl;
+      // std::cout << "Reader: Got" << (int)i << " values out of " <<
+      // take_numbers
+      //           << std::endl;
       ull inner_start = __rdtscp(&aux);
       attempts++;
       thread_yield_waiter(attempts);

@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file lockless_ring_buffer_layout.hpp
+ * @brief Cache-aligned, lock-free ring buffer memory layouts.
+ */
+
 #include "../../common/concepts/generic.hpp"
 #include "../../common/generic.hpp"
 #include <atomic>
@@ -8,8 +13,17 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+/**
+ * @namespace engine::buffer::layout
+ * @brief Defines Layouts for the Producer and Consumer classes to use.
+ * */
 namespace engine::buffer::layout {
 
+/**
+ * @struct StaticLockLessRingBufferMemoryLayout
+ * @brief Raw memory structure for a standard three-pointer ring buffer.
+ * @details Aligned to 64 bytes to prevent false sharing between heads.
+ */
 template <typename Udata, size_t size, typename Uindex = unsigned long long>
 struct StaticLockLessRingBufferMemoryLayout {
   using index_type_a = std::atomic<Uindex>;
@@ -18,6 +32,16 @@ struct StaticLockLessRingBufferMemoryLayout {
   alignas(64) index_type_a commit_head;
   Udata array[size];
 };
+
+/**
+ * @class StaticLockLessRingBufferLayout
+ * @brief Orchestrator for the standard lock-free ring buffer layout.
+ * @tparam Udata Defines the type of data to store in the buffer
+ * @tparam Uindex Defines the array index pointer type that the write_head, read_head and commit_head will store.
+ * * Default value is unsigned long long.
+ * @tparam size_value Must be a Power of Two for optimized bitwise indexing.
+ * @tparam Allocator Must provide an allocator where the @ref StaticLockLessRingBufferMemoryLayout will be allocated
+ */
 template <typename Udata, size_t size_value,
           template <typename> typename Allocator,
           typename Uindex = unsigned long long>
@@ -33,16 +57,6 @@ public:
   using Alloc = Allocator<MemLayout>;
   using AllocTrait = std::allocator_traits<Alloc>;
 
-  // Nah you need to really think about how you wanna structure this.
-  // If this class owns the memory then it will have to be destoyed when this
-  // class destroys to prevent mem leaks, but that would mean that I won't be
-  // able to copy the constructor. Maybe I can.. use an atomic reference counter
-  // so on each copy it increments the counter and on each delete it decrements
-  // it. Arc is already made so that should be simple enough to do. But I would
-  // still have to solve the problem of different virt addresses.
-  // The solution here is to also ahve a registry at the start of the allocated
-  // pages and stuff and at that point, you're just creating a custom allocator,
-  // just try to find one and stick to it. use Mimalloc, tcmalloc or jemalloc
 private:
   // store the allocator
   Alloc alloc;
@@ -51,10 +65,9 @@ private:
 public:
   StaticLockLessRingBufferLayout()
       : alloc(), layout(AllocTrait::allocate(alloc, 1)) {}
-  StaticLockLessRingBufferLayout(StaticLockLessRingBufferLayout &other) {
-    alloc = other.alloc;
-    layout = other.layout;
-  }
+  // Copying shares the underlying memory (ARC logic handled by Allocator)
+  StaticLockLessRingBufferLayout(StaticLockLessRingBufferLayout &other)
+      : alloc(other.alloc), layout(other.layout) {}
   StaticLockLessRingBufferLayout &
   operator=(StaticLockLessRingBufferLayout &other) {
     alloc = other.alloc;
@@ -92,19 +105,10 @@ public:
   }
 };
 
-// not used anymore. got replaced by concepts::LockableCell
-// template <typename Udata>
-// concept HasHeader = requires(Udata d) {
-//   typename Udata::header_type;
-//   typename Udata::length_type;
-//   requires concepts::IsStandardUint<typename Udata::header_type>;
-//   requires concepts::IsStandardUint<typename Udata::length_type>;
-//   { d.header() } -> std::same_as<typename Udata::header_type &>;
-//   { d.get_length() } -> std::same_as<typename Udata::length_type &>;
-//   { d.is_data_present() } -> std::same_as<bool>;
-// };
-// writing a new type here.
-
+/**
+ * @brief Raw memory structure for a cell-lockable ring buffer.
+ * @details Relies on the data cells themselves to manage fine-grained synchronization.
+ */
 template <typename Udata, size_t size, typename Uindex = unsigned long long>
   requires concepts::LockableCell<Udata>
 struct StaticLockLessRingBufferCellLockableMemoryLayout {
@@ -114,6 +118,9 @@ struct StaticLockLessRingBufferCellLockableMemoryLayout {
   Udata array[size];
 };
 
+/**
+ * @brief Layout that satisfies ReadLockableIndex and WriteLockableIndex via LockableCell.
+ */
 template <typename Udata, size_t size_value,
           template <typename> typename Allocator,
           typename Uindex = unsigned long long>
@@ -168,6 +175,8 @@ public:
     return layout->write_head;
   }
   MemLayout::index_type_a &get_read_head() const { return layout->read_head; }
+
+  /** @brief RAII Guard satisfying the requirements of @ref ReadLockableIndex / @ref WriteLockableIndex. */
   template <bool reader> class LockGuard {
   private:
     data_type *data;
