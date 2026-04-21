@@ -1,31 +1,19 @@
+#pragma once
 
+#include "../../common/concepts/generic.hpp"
 #include <atomic>
-#include <concepts>
-#include <iostream>
-#include <optional>
-
-#include "../../common/generic.hpp"
 
 namespace engine::buffer::ring::cell_lockable_approach {
 
 // clang-format off
 template <typename Layout>
 concept LayoutVerification = requires(
-        Layout l, 
-        typename Layout::index_type i, 
-        typename Layout::index_reader_guard l_r_g,
-        typename Layout::index_writer_guard l_w_g,
-        typename Layout::data_type d
+        Layout l
 ) {
   typename Layout::MemLayout;
   typename Layout::data_type;
   typename Layout::index_type;
   typename Layout::MemLayout::index_type_a;
-
-  typename Layout::index_reader_guard;
-  requires std::movable<typename Layout::index_reader_guard> && !std::copyable<typename Layout::index_reader_guard>;
-  typename Layout::index_writer_guard;
-  requires std::movable<typename Layout::index_writer_guard> && !std::copyable<typename Layout::index_writer_guard>;
 
   Layout::size;
   requires Layout::size > 0;
@@ -34,19 +22,15 @@ concept LayoutVerification = requires(
   requires std::same_as<typename Layout::MemLayout::index_type_a, std::atomic<typename Layout::index_type>>;
   { l.get_write_head() } -> std::same_as<typename Layout::MemLayout::index_type_a &>;
   { l.get_read_head() } -> std::same_as<typename Layout::MemLayout::index_type_a &>;
-  { l.try_read_lock(i) } -> std::same_as<std::optional<typename Layout::index_reader_guard>>; // locks that value of array
-  { l.read_lock(i) } -> std::same_as<typename Layout::index_reader_guard>; // blocking lock
-  { l.try_write_lock(i) } -> std::same_as<std::optional<typename Layout::index_writer_guard>>; // locks that value of array
-  { l.write_lock(i) } -> std::same_as<typename Layout::index_writer_guard>; // blocking lock
-  { *l_r_g } -> std::same_as<typename Layout::data_type &>;
-  { *l_w_g } -> std::same_as<typename Layout::data_type &>;
 };
 // clang-format on
 
 struct CellLockableApproachProtocol;
 
 template <typename LayoutType>
-  requires LayoutVerification<LayoutType>
+  requires LayoutVerification<LayoutType> &&
+           concepts::ReadLockableIndex<LayoutType> &&
+           concepts::WriteLockableIndex<LayoutType>
 class ProducerConsumer {
 public:
   using Protocol = CellLockableApproachProtocol;
@@ -86,10 +70,7 @@ public:
     if (l_g_opt.has_value()) {
       auto l_g = std::move(*l_g_opt);
       output = *l_g;
-    } else {
-      // std::cout << "Reading Failed at " << r_h << std::endl;
-    }
-    // lock dropped here
+    } // lock dropped here
 
     read_head.fetch_add(1, std::memory_order_acq_rel);
     return output;

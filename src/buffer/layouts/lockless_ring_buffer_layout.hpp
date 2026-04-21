@@ -1,3 +1,4 @@
+#pragma once
 
 #include "../../common/concepts/generic.hpp"
 #include "../../common/generic.hpp"
@@ -91,18 +92,21 @@ public:
   }
 };
 
-template <typename Udata>
-concept HasHeader = requires(Udata d) {
-  typename Udata::header_type;
-  typename Udata::length_type;
-  requires concepts::IsStandardUint<typename Udata::header_type>;
-  requires concepts::IsStandardUint<typename Udata::length_type>;
-  { d.header() } -> std::same_as<typename Udata::header_type &>;
-  { d.get_length() } -> std::same_as<typename Udata::length_type &>;
-  { d.is_data_present() } -> std::same_as<bool>;
-};
+// not used anymore. got replaced by concepts::LockableCell
+// template <typename Udata>
+// concept HasHeader = requires(Udata d) {
+//   typename Udata::header_type;
+//   typename Udata::length_type;
+//   requires concepts::IsStandardUint<typename Udata::header_type>;
+//   requires concepts::IsStandardUint<typename Udata::length_type>;
+//   { d.header() } -> std::same_as<typename Udata::header_type &>;
+//   { d.get_length() } -> std::same_as<typename Udata::length_type &>;
+//   { d.is_data_present() } -> std::same_as<bool>;
+// };
+// writing a new type here.
+
 template <typename Udata, size_t size, typename Uindex = unsigned long long>
-  requires HasHeader<Udata>
+  requires concepts::LockableCell<Udata>
 struct StaticLockLessRingBufferCellLockableMemoryLayout {
   using index_type_a = std::atomic<Uindex>;
   alignas(64) index_type_a write_head;
@@ -113,7 +117,7 @@ struct StaticLockLessRingBufferCellLockableMemoryLayout {
 template <typename Udata, size_t size_value,
           template <typename> typename Allocator,
           typename Uindex = unsigned long long>
-  requires concepts::PowerOfTwo<size_value> && HasHeader<Udata>
+  requires concepts::PowerOfTwo<size_value> && concepts::LockableCell<Udata>
 class StaticLockLessRingBufferCellLockableLayout {
 public:
   static const size_t size = size_value;
@@ -175,11 +179,9 @@ public:
     void unlock() {
       if (data == nullptr)
         return;
-      auto atomic_ref = std::atomic_ref<data_header_type>(data->header());
-      atomic_ref.store(0, std::memory_order_release);
+      data_type::unlock(*data);
       if (reader)
-        std::atomic_ref<data_length_type>(data->get_length())
-            .store(0, std::memory_order_release);
+        data_type::clear_data(*data);
     }
     LockGuard(LockGuard &&r_value) : data(r_value.data) {
       r_value.data = nullptr;
@@ -201,58 +203,36 @@ public:
   using index_writer_guard = LockGuard<false>;
   std::optional<index_reader_guard> try_read_lock(index_type i) {
     // try locking
-    while (common::custom_test_and_set(&(this->operator[](i).header()), 0)) {
-      // std::cout << "Reader: Could not lock at " << i << " Header: "
-      //           << (int)std::atomic_ref<uint8_t>(
-      //                  this->operator[](i).get_length())
-      //                  .load(std::memory_order_acquire)
-      //           << std::endl;
+    while (!data_type::try_lock(this->operator[](i))) {
       _mm_pause();
     }
     auto l_g = index_reader_guard(&(this->operator[](i)));
-    // get length
-    auto a_ref =
-        std::atomic_ref<data_length_type>(this->operator[](i).get_length());
-    if (a_ref.load(std::memory_order_acquire) <= 0) {
-      // std::cout << "Reader: Nothing here" << std::endl;
+    if (!data_type::contains_data(this->operator[](i))) {
       return {};
     }
     return std::move(l_g);
   }
   std::optional<index_writer_guard> try_write_lock(index_type i) {
     // try locking
-    bool locked =
-        common::custom_test_and_set(&(this->operator[](i).header()), 0);
-    if (locked) {
-      return {};
+    while (!data_type::try_lock(this->operator[](i))) {
+      _mm_pause();
     }
     auto l_g = index_writer_guard(&(this->operator[](i)));
-    auto a_ref =
-        std::atomic_ref<data_length_type>(this->operator[](i).get_length());
-    if (a_ref.load(std::memory_order_acquire) > 0) {
+    if (data_type::contains_data(this->operator[](i))) {
       return {};
     }
     return std::move(l_g);
   }
-  index_reader_guard read_lock(index_type i) {
-    // busy locking here
-    while (true) {
-      if (auto res = try_read_lock(i)) {
-        return std::move(*res);
-      }
-      _mm_pause();
-    }
-  }
-  index_writer_guard write_lock(index_type i) {
-    // busy locking here
-    while (true) {
-      if (auto res = try_write_lock(i)) {
-        return std::move(*res);
-      }
-      _mm_pause();
-    }
-  }
 };
+
+// #include "../../allocators/one_time_static_allocator.hpp"
+// #include "../../common/memory/cache_line.hpp"
+// using data = engine::memory::CacheLineUint8LengthHeaderPacked<int>;
+// template <typename Layout>
+// using Allocator =
+//     engine::allocators::OneTimeStaticSharedMemoryAllocator<Layout>;
+// template class StaticLockLessRingBufferCellLockableLayout<data, 1024,
+//                                                           Allocator>;
 
 // #ifdef LSP_ENABLED
 // #include "../../allocators/one_time_static_allocator.hpp"

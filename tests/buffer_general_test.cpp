@@ -12,6 +12,7 @@
 #include "../src/buffer/buffer.hpp"
 #include "../src/buffer/layouts/lockless_ring_buffer_layout.hpp"
 #include "../src/buffer/ring/cell_lockable_approach.hpp"
+#include "../src/buffer/ring/cell_lockable_approach_opt_1.hpp"
 #include "../src/buffer/ring/three_pointer_approach.hpp"
 #include "../src/buffer/scmp.hpp"
 #include "../src/common/memory/cache_line.hpp"
@@ -19,11 +20,10 @@
 #define PROFILING 1
 #define PREFETCHING 1
 #define TEST_CHECK 1
-#define MEM_CTRL 0
 
-static const size_t buffer_size = 65536 * 4;
 static const int num_of_writers = 8;
-static const int write_numbers = 80000 * 128;
+static const size_t buffer_size = 65536 * 1;
+static const int write_numbers = 80000 * 1;
 
 using ull = unsigned long long;
 
@@ -41,16 +41,28 @@ using Allocator =
 // using ConsumerFactory = engine::buffer::scmp::Factory::ConsumerFactory<
 //     engine::buffer::ring::three_pointer_approach::Consumer, Layout>;
 
-using data_type = engine::memory::CacheLineUint8LengthHeaderPacked<int>;
+// using data_type = engine::memory::CacheLineUint8LengthHeaderPacked<int>;
+using data_type = engine::memory::CacheAlignedHeaderLine<int>;
 using Layout =
     engine::buffer::layout::StaticLockLessRingBufferCellLockableLayout<
         data_type, buffer_size, Allocator>;
+
 template <typename Layout>
 using ProducerFactory = engine::buffer::scmp::Factory::ProducerFactory<
     engine::buffer::ring::cell_lockable_approach::ProducerConsumer, Layout>;
 template <typename Layout>
 using ConsumerFactory = engine::buffer::scmp::Factory::ConsumerFactory<
     engine::buffer::ring::cell_lockable_approach::ProducerConsumer, Layout>;
+
+// Does not work yet
+// template <typename Layout>
+// using ProducerFactory = engine::buffer::scmp::Factory::ProducerFactory<
+//     engine::buffer::ring::cell_lockable_approack_opt_1::ProducerConsumer,
+//     Layout>;
+// template <typename Layout>
+// using ConsumerFactory = engine::buffer::scmp::Factory::ConsumerFactory<
+//     engine::buffer::ring::cell_lockable_approack_opt_1::ProducerConsumer,
+//     Layout>;
 
 using Buffer = engine::buffer::Buffer<ProducerFactory, ConsumerFactory, Layout>;
 using Consumer = ConsumerFactory<Layout>::Consumer;
@@ -78,7 +90,9 @@ void ConsumerProcess(Consumer consumer) {
   }
 
   const int take_numbers = write_numbers * num_of_writers;
+#if TEST_CHECK == 1
   ull *show_module = new ull[take_numbers](0);
+#endif
   int i = 0;
   int attempts = 0;
   ull failed_attempts = 0;
@@ -93,7 +107,7 @@ void ConsumerProcess(Consumer consumer) {
 #endif
 
   while (i < take_numbers) {
-#if PREFETCHING == 1
+#if PREFETCHING == 1 && TEST_CHECK == 1
     __builtin_prefetch(&show_module[i + 16], 1, 3);
 #endif
     std::optional<buffer_data_type> cons = consumer.read();
@@ -104,16 +118,19 @@ void ConsumerProcess(Consumer consumer) {
 
       buffer_data_type val = std::move(cons.value());
 
-      // std::cout << "Reader: Got" << (int)val.get_length() << " values"
-      //           << std::endl;
-
+#if TEST_CHECK == 1
       for (int j = 0; j < val.get_length(); j++) {
         // Use vector instructions later here
         show_module[i] = val[j];
         i++;
       }
+#else
+      i += val.get_length();
+#endif
     } else {
 #if PROFILING == 1
+      std::cout << "Reader: Got" << (int)i << " values out of " << take_numbers
+                << std::endl;
       ull inner_start = __rdtscp(&aux);
       attempts++;
       thread_yield_waiter(attempts);
@@ -161,8 +178,8 @@ void ConsumerProcess(Consumer consumer) {
     std::cout << "All Found" << std::endl;
   }
   delete[] check_numbers;
-#endif
   delete[] show_module;
+#endif
 }
 
 void ProducerProcess(Producer producer, int n) {
@@ -180,7 +197,7 @@ void ProducerProcess(Producer producer, int n) {
 
   const auto index = [&](const int &a) { return a + (n * write_numbers); };
   buffer_data_type next;
-  next.header() = 1;
+  // next.header() = 1;
   next.get_length() = std::min((size_t)write_numbers - i, next.max_elems);
   for (int c = 0; c < next.get_length(); c++) {
     next[c] = index(i + c);
@@ -198,7 +215,7 @@ void ProducerProcess(Producer producer, int n) {
       // std::cout << "Writer " << n << ": sent " << (int)next.get_length()
       //           << " values" << std::endl;
 #endif
-      next.header() = 1;
+      // next.header() = 1;
       next.get_length() = std::min(write_numbers - i, next.max_elems);
       for (int c = 0; c < next.max_elems; c++) {
         next[c] = index(i + c);

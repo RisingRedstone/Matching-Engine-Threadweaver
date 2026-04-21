@@ -52,8 +52,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         target_compile_options(buffer_general_test PRIVATE -g -Og -fno-omit-frame-pointer)
     endif()
 else()
-        target_compile_options(engine_logic INTERFACE -g -fno-omit-frame-pointer -fverbose-asm "-I${LTTNG_UST_INCLUDE_DIRS}" "-I${URCU_INCLUDE_DIRS}")
-        target_compile_options(buffer_general_test PRIVATE -g -fno-omit-frame-pointer -fverbose-asm)
+        target_compile_options(engine_logic INTERFACE -g -fno-omit-frame-pointer -fverbose-asm -O3 "-I${LTTNG_UST_INCLUDE_DIRS}" "-I${URCU_INCLUDE_DIRS}")
+        target_compile_options(buffer_general_test PRIVATE -g -fno-omit-frame-pointer -fverbose-asm -O3)
 endif()
 
 # Test files

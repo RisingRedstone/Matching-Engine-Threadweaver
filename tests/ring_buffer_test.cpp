@@ -25,7 +25,7 @@ using ull = unsigned long long int;
 using atomic_ull = std::atomic<ull>;
 
 const int num_of_writers = 8;
-const unsigned int data_size = 65536 * 64;
+const unsigned int data_size = 65536 * 128;
 const int write_numbers = 80000 * 128;
 using buffer_data_type = engine::memory::CacheLinePacked<int>;
 
@@ -146,7 +146,9 @@ void ReaderChildProcess(
   }
 
   const int take_numbers = write_numbers * num_of_writers;
+#if TEST_CHECK == 1
   ull *show_module = new ull[take_numbers](0);
+#endif
   int i = 0;
   int attempts = 0;
   ull failed_attempts = 0;
@@ -161,7 +163,7 @@ void ReaderChildProcess(
 #endif
 
   while (i < take_numbers) {
-#if PREFETCHING == 1
+#if PREFETCHING == 1 && TEST_CHECK == 1
     __builtin_prefetch(&show_module[i + 16], 1, 3);
 #endif
     std::optional<buffer_data_type> cons = r_buffer.read();
@@ -171,11 +173,14 @@ void ReaderChildProcess(
       attempts = 0;
 
       buffer_data_type val = cons.value();
+      i += val.atom.counter;
+
+#if TEST_CHECK == 1
       for (int j = 0; j < val.atom.counter; j++) {
         // Use vector instructions later here
         show_module[i] = val.atom.data[j];
-        i++;
       }
+#endif
     } else {
 #if PROFILING == 1
       ull inner_start = __rdtscp(&aux);
@@ -225,8 +230,8 @@ void ReaderChildProcess(
     std::cout << "All Found" << std::endl;
   }
   delete[] check_numbers;
-#endif
   delete[] show_module;
+#endif
 }
 void WriterChildProcess(
     LockLessRingBufferWrite<ull, buffer_data_type, data_size> w_buffer, int n) {
