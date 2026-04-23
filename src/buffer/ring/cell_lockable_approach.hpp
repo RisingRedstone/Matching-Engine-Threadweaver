@@ -7,6 +7,7 @@
 
 #include "../../common/concepts/generic.hpp"
 #include <atomic>
+#include <optional>
 
 /**
  * @namespace engine::buffer::ring::cell_lockable_approach
@@ -64,9 +65,11 @@ public:
 
 private:
   Layout mem_layout;
+  std::optional<index_type> cache_w_h;
 
 public:
-  ProducerConsumer(Layout mem_layout) : mem_layout(mem_layout) {}
+  ProducerConsumer(Layout mem_layout)
+      : mem_layout(mem_layout), cache_w_h(std::nullopt) {}
   // delete the copy constructor.
   // only the move constructo should be allowed
   ProducerConsumer(ProducerConsumer &other) = delete;
@@ -111,11 +114,17 @@ public:
     index_type_a &write_head = mem_layout.get_write_head();
 
     while (true) {
-      index_type w_h = write_head.fetch_add(1, std::memory_order_acq_rel);
+      index_type w_h;
+      if (cache_w_h.has_value()) {
+        w_h = cache_w_h.value();
+        cache_w_h = std::nullopt;
+      } else {
+        w_h = write_head.fetch_add(1, std::memory_order_acq_rel);
+      }
       index_type r_h = read_head.load(std::memory_order_acquire);
 
       if (w_h >= Layout::size + r_h) {
-        write_head.fetch_sub(1, std::memory_order_acq_rel);
+        cache_w_h = w_h;
         return false;
       }
 

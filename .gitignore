@@ -1,4 +1,5 @@
 /build
+/bin
 /bin/debug/*
 /bin/release/*
 /docs/*

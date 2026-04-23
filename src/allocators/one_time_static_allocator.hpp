@@ -6,6 +6,7 @@
  */
 
 #include <atomic>
+#include <cstring>
 #include <optional>
 #include <sched.h>
 #include <sys/mman.h>
@@ -65,9 +66,10 @@ public:
     if (allocated)
       return nullptr;
     void *mem_ptr = mmap(NULL, sizeof(Chunk), PROT_READ | PROT_WRITE,
-                         MAP_SHARED | MAP_ANON, -1, 0);
+                         MAP_SHARED | MAP_ANON | MAP_HUGE_2MB, -1, 0);
     if (mem_ptr == MAP_FAILED)
       return nullptr;
+    // memset(mem_ptr, 0, sizeof(Chunk)); // memset so no page faults when the program is running
     owner_pid = getpid(); // the owner is the current thread that called
     allocated = true;
     chunk = reinterpret_cast<Chunk *>(mem_ptr);
