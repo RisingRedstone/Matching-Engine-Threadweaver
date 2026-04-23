@@ -93,6 +93,6 @@ pkgs.mkShell {
 
     # Test this one
     alias valgrind_prof="mkdir -p .profile && valgrind --tool=callgrind --callgrind-out-file=.profile/callgrind.out.%p --separate-threads=yes --trace-children=yes --dump-instr=yes --collect-jumps=yes --simulate-cache=yes --simulate-hwpref=yes"
-    alias perf_prof="mkdir -p .profile && sudo perf record -e cache-references,cache-misses,L1-dcache-load-misses -g -o ./.profile/perf.data"
+    alias perf_prof="mkdir -p .profile && sudo perf record -e cycles,cache-references,cache-misses,L1-dcache-load-misses -g -o ./.profile/perf.data"
   '';
 }

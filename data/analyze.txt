@@ -1,0 +1,54 @@
+ Performance counter stats for './bin/release/buffer_general_test':                                                                                                                                                  
+          1,020.91 msec task-clock                       #    7.281 CPUs utilized
+            13,393      context-switches                 #   13.119 K/sec       
+                13      cpu-migrations                   #   12.734 /sec       
+            35,280      page-faults                      #   34.558 K/sec     
+       754,813,912      instructions                     #    0.17  insn per cycle 
+                                                  #    0.41  stalled cycles per insn
+     4,364,798,014      cycles                           #    4.275 GHz            
+       309,173,144      stalled-cycles-frontend          #    7.08% frontend cycles idle 
+       165,671,775      branches                         #  162.279 M/sec               
+        17,810,078      branch-misses                    #   10.75% of all branches    
+       0.140208083 seconds time elapsed                                               
+       0.699056000 seconds user
+       0.316351000 seconds sys
+
+
+ Performance counter stats for './bin/release/buffer_general_test':
+
+          2,974.82 msec task-clock                       #    7.488 CPUs utilized             
+            34,048      context-switches                 #   11.445 K/sec                     
+                96      cpu-migrations                   #   32.271 /sec                      
+            72,743      page-faults                      #   24.453 K/sec                     
+     1,625,304,381      instructions                     #    0.16  insn per cycle            
+                                                  #    0.43  stalled cycles per insn   
+    10,306,291,414      cycles                           #    3.465 GHz                       
+       696,405,801      stalled-cycles-frontend          #    6.76% frontend cycles idle      
+       357,479,305      branches                         #  120.168 M/sec                     
+        39,400,179      branch-misses                    #   11.02% of all branches           
+
+       0.397279656 seconds time elapsed
+       2.218232000 seconds user
+       0.730612000 seconds sys
+
+
+ Performance counter stats for './bin/release/buffer_general_test':
+
+          3,248.19 msec task-clock                       #    7.579 CPUs utilized             
+            34,342      context-switches                 #   10.573 K/sec                     
+                81      cpu-migrations                   #   24.937 /sec                      
+            74,169      page-faults                      #   22.834 K/sec                     
+     1,679,346,381      instructions                     #    0.13  insn per cycle            
+                                                  #    0.46  stalled cycles per insn   
+    12,738,428,109      cycles                           #    3.922 GHz                       
+       768,549,026      stalled-cycles-frontend          #    6.03% frontend cycles idle      
+       362,534,071      branches                         #  111.611 M/sec                     
+        39,453,742      branch-misses                    #   10.88% of all branches           
+
+       0.428566896 seconds time elapsed
+       2.455742000 seconds user
+       0.770921000 seconds sys
+
+
+
+       PAGE FAULTS COULD BE THE REASON. you see mmap doesn't initialize everything automatically when I call it. it lazily does it. so the more I use the buffer, the lower the effect of the initial memory allocation of the mmap. so the lower the effect of page faults. There are about 1/2 the pge fault in the first one cause the full buffer wasnt even being used. The full buffer was used by the 2nd and then the 3rd one.

@@ -44,6 +44,12 @@ target_link_libraries(ring_buffer_low_cas_test PRIVATE engine_logic -Wl,--whole-
 add_executable(buffer_general_test tests/buffer_general_test.cpp)
 target_link_libraries(ring_buffer_test PRIVATE engine_logic)
 
+# used for tests
+set(APPROACH "2" CACHE STRING "What approach to use. only 1 (three_pointer) and 2 (cell_lockable) available")
+set(NUM_OF_WRITERS "8" CACHE STRING "The number of writers for the test.")
+set(BUFFER_SIZE "8388608" CACHE STRING "The buffer size to use.")
+set(WRITE_NUMBERS "10240000" CACHE STRING "Numbers to write per writer.")
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     if(NOT MSVC)
         target_compile_options(engine_logic INTERFACE -g -Og -fno-omit-frame-pointer "-I${LTTNG_UST_INCLUDE_DIRS}" "-I${URCU_INCLUDE_DIRS}")
@@ -55,6 +61,7 @@ else()
         target_compile_options(engine_logic INTERFACE -g -fno-omit-frame-pointer -fverbose-asm -O3 "-I${LTTNG_UST_INCLUDE_DIRS}" "-I${URCU_INCLUDE_DIRS}")
         target_compile_options(buffer_general_test PRIVATE -g -fno-omit-frame-pointer -fverbose-asm -O3)
 endif()
+target_compile_definitions(buffer_general_test PRIVATE APPROACH=${APPROACH} NUM_OF_WRITERS=${NUM_OF_WRITERS} BUFFER_SIZE=${BUFFER_SIZE} WRITE_NUMBERS=${WRITE_NUMBERS})
 
 # Test files
 add_test(NAME RingBufferTest COMMAND ring_buffer_test)

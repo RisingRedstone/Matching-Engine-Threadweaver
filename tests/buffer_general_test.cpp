@@ -1,6 +1,7 @@
 #include <atomic>
 #include <cstdio>
 #include <iostream>
+#include <linux/prctl.h>
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
@@ -21,9 +22,22 @@
 #define PREFETCHING 1
 #define TEST_CHECK 0
 
-static const int num_of_writers = 8;
-static const size_t buffer_size = 65536 * 128;
-static const int write_numbers = 80000 * 128;
+#ifndef NUM_OF_WRITERS
+#define NUM_OF_WRITERS 8
+#endif
+#ifndef BUFFER_SIZE
+#define BUFFER_SIZE 65536 * 8
+#endif
+#ifndef WRITE_NUMBERS
+#define WRITE_NUMBERS 80000 * 2048
+#endif
+#ifndef APPROACH
+#define APPROACH 2
+#endif
+
+static const int num_of_writers = NUM_OF_WRITERS;
+static const size_t buffer_size = BUFFER_SIZE;
+static const int write_numbers = WRITE_NUMBERS;
 
 using ull = unsigned long long;
 
@@ -31,16 +45,17 @@ template <typename Layout>
 using Allocator =
     engine::allocators::OneTimeStaticSharedMemoryAllocator<Layout>;
 
-// using data_type = engine::memory::CacheLinePacked<int, uint8_t>;
-// using Layout = engine::buffer::layout::StaticLockLessRingBufferLayout<
-//     data_type, buffer_size, Allocator>;
-// template <typename Layout>
-// using ProducerFactory = engine::buffer::scmp::Factory::ProducerFactory<
-//     engine::buffer::ring::three_pointer_approach::Producer, Layout>;
-// template <typename Layout>
-// using ConsumerFactory = engine::buffer::scmp::Factory::ConsumerFactory<
-//     engine::buffer::ring::three_pointer_approach::Consumer, Layout>;
-
+#if APPROACH == 1
+using data_type = engine::memory::CacheLinePacked<int, uint8_t>;
+using Layout = engine::buffer::layout::StaticLockLessRingBufferLayout<
+    data_type, buffer_size, Allocator>;
+template <typename Layout>
+using ProducerFactory = engine::buffer::scmp::Factory::ProducerFactory<
+    engine::buffer::ring::three_pointer_approach::Producer, Layout>;
+template <typename Layout>
+using ConsumerFactory = engine::buffer::scmp::Factory::ConsumerFactory<
+    engine::buffer::ring::three_pointer_approach::Consumer, Layout>;
+#elif APPROACH == 2
 // using data_type = engine::memory::CacheLineUint8LengthHeaderPacked<int>;
 using data_type = engine::memory::CacheAlignedHeaderLine<int>;
 using Layout =
@@ -53,6 +68,7 @@ using ProducerFactory = engine::buffer::scmp::Factory::ProducerFactory<
 template <typename Layout>
 using ConsumerFactory = engine::buffer::scmp::Factory::ConsumerFactory<
     engine::buffer::ring::cell_lockable_approach::ProducerConsumer, Layout>;
+#endif
 
 // Does not work yet
 // template <typename Layout>
@@ -68,6 +84,23 @@ using Buffer = engine::buffer::Buffer<ProducerFactory, ConsumerFactory, Layout>;
 using Consumer = ConsumerFactory<Layout>::Consumer;
 using Producer = ProducerFactory<Layout>::Producer;
 using buffer_data_type = Consumer::data_type;
+
+void perf_enable() {
+  // asm volatile("" ::: "memory");
+  // if (prctl(PR_TASK_PERF_EVENTS_ENABLE, 0, 0, 0, 0) == -1) {
+  //   perror("prctl enable failed");
+  // }else{
+  //     perror("prctl enable succeeded");
+  // }
+  // asm volatile("" ::: "memory");
+}
+void perf_disable() {
+  // asm volatile("" ::: "memory");
+  // if (prctl(PR_TASK_PERF_EVENTS_DISABLE, 0, 0, 0, 0) == -1) {
+  //   perror("prctl disable failed");
+  // }
+  // asm volatile("" ::: "memory");
+}
 
 void thread_yield_waiter(int attempt) {
   if (attempt < 10) {
@@ -97,6 +130,8 @@ void ConsumerProcess(Consumer consumer) {
   int attempts = 0;
   ull failed_attempts = 0;
   std::cout << "Starting Read" << std::endl;
+
+  perf_enable();
 
 #if PROFILING == 1
   unsigned int aux;
@@ -154,6 +189,8 @@ void ConsumerProcess(Consumer consumer) {
   prctl(PR_TASK_PERF_EVENTS_DISABLE, 0, 0, 0, 0);
 #endif
 
+  perf_disable();
+
 #if TEST_CHECK == 1
   // Check if all numbers are there
   std::cout << "Checking numbers" << std::endl;
@@ -196,6 +233,8 @@ void ProducerProcess(Producer producer, int n) {
   ull total_null_time = 0;
 #endif
 
+  perf_enable();
+
   const auto index = [&](const int &a) { return a + (n * write_numbers); };
   buffer_data_type next;
   // next.header() = 1;
@@ -233,6 +272,9 @@ void ProducerProcess(Producer producer, int n) {
 #endif
     }
   }
+
+  perf_disable();
+
 #if PROFILING == 1
   std::cout << "Writer " << n << ": "
             << "Failed attempts: " << writer_failed_attempts
@@ -246,7 +288,11 @@ void ProducerProcess(Producer producer, int n) {
 }
 
 int main() {
+  // prctl(PR_TASK_PERF_EVENTS_DISABLE, 0, 0, 0, 0);
   Buffer buffer = Buffer();
+
+  perf_enable();
+
   auto consumer_opt = buffer.create_consumer();
   if (!consumer_opt.has_value()) {
     perror("Could not create consumer");
@@ -292,6 +338,8 @@ int main() {
   for (int i = 0; i < num_of_writers; i++) {
     waitpid(writerpid[i], &status, 0);
   }
+
+  perf_disable();
 
 program_end:
   return 0;
