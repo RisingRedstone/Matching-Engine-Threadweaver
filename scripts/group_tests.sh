@@ -17,7 +17,7 @@ NUMBER_OF_WRITERS=(8)
 # done
 BUFFER_SIZE=()
 for i in {0..10}; do
-    BUFFER_SIZE+=($((16384*4**i)))
+    BUFFER_SIZE+=($((64*2**i)))
 done
 WRITE_NUMBERS+=($((65536*2**10)))
 NUM_OF_TESTS=4
