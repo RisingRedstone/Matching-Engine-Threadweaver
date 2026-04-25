@@ -4,6 +4,7 @@
  * @brief Factory implementations for Single-Consumer Multiple-Producer (SCMP)
  * buffers.
  */
+#include "generics.hpp"
 #include <optional>
 /**
  * @namespace engine::buffer::scmp::Factory
@@ -18,6 +19,7 @@ namespace engine::buffer::scmp::Factory {
  * @tparam Layout The memory layout type shared between producer and consumer.
  */
 template <template <typename> typename ConsumerType, typename Layout>
+  requires roles::IsSingleInstanceConsumer<ConsumerType<Layout>>
 class ConsumerFactory {
 public:
   using Consumer = ConsumerType<Layout>;
@@ -48,6 +50,7 @@ public:
  * @tparam Layout The memory layout type shared between producer and consumer.
  */
 template <template <typename> typename ProducerType, typename Layout>
+  requires roles::IsMultipleInstanceProducer<ProducerType<Layout>>
 class ProducerFactory {
 public:
   using Producer = ProducerType<Layout>;

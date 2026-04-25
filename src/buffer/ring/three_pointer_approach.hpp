@@ -5,6 +5,7 @@
  * @brief Logic for a lock-free MPSC ring buffer using a three-pointer synchronization protocol.
  */
 
+#include "../generics.hpp"
 #include <atomic>
 #include <concepts>
 #include <optional>
@@ -56,6 +57,8 @@ class Consumer {
 public:
   using Protocol = ThreePointerApproachProtocol;
   using Layout = LayoutType;
+  using ConsumerInstanceType = roles::SingleInstance;
+  using ProducerInstanceType = roles::MultipleInstance;
 
   using data_type = Layout::data_type;
   using index_type = Layout::index_type;

@@ -12,6 +12,7 @@
  * @brief Provides classes and interfaces for buffers.
  * */
 namespace engine::buffer {
+
 /**
  * @brief Ensures that a Producer, Consumer, and Layout all share the same
  * Protocol and Memory Layout types.

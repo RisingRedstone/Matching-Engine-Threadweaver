@@ -41,7 +41,11 @@ target_include_directories(ring_buffer_low_cas_test PRIVATE src ${LTTNG_UST_INCL
 target_link_libraries(ring_buffer_low_cas_test PRIVATE engine_logic -Wl,--whole-archive PkgConfig::LTTNG_UST -Wl,--no-whole-archive)
 
 # Buffer General Test
-add_executable(buffer_general_test tests/buffer_general_test.cpp)
+add_executable(buffer_general_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/buffer_general_test.cpp)
+target_link_libraries(ring_buffer_test PRIVATE engine_logic)
+
+# Simple Buffer Test
+add_executable(buffer_simple_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/buffer_simple_test.cpp)
 target_link_libraries(ring_buffer_test PRIVATE engine_logic)
 
 # used for tests
@@ -56,18 +60,22 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         target_compile_options(ring_buffer_test PRIVATE -g -Og -fno-omit-frame-pointer)
         target_compile_options(ring_buffer_low_cas_test PRIVATE -g -Og -fno-omit-frame-pointer)
         target_compile_options(buffer_general_test PRIVATE -g -Og -fno-omit-frame-pointer)
+        target_compile_options(buffer_simple_test PRIVATE -g -Og -fno-omit-frame-pointer)
     endif()
 else()
         target_compile_options(engine_logic INTERFACE -g -fno-omit-frame-pointer -fverbose-asm -O3 "-I${LTTNG_UST_INCLUDE_DIRS}" "-I${URCU_INCLUDE_DIRS}")
         target_compile_options(buffer_general_test PRIVATE -g -fno-omit-frame-pointer -fverbose-asm -O3)
+        target_compile_options(buffer_simple_test PRIVATE -g -fno-omit-frame-pointer -fverbose-asm -O3)
 endif()
 target_compile_definitions(buffer_general_test PRIVATE APPROACH=${APPROACH} NUM_OF_WRITERS=${NUM_OF_WRITERS} BUFFER_SIZE=${BUFFER_SIZE} WRITE_NUMBERS=${WRITE_NUMBERS})
+target_compile_definitions(buffer_simple_test PRIVATE BUFFER_SIZE=${BUFFER_SIZE} WRITE_NUMBERS=${WRITE_NUMBERS})
 
 # Test files
 add_test(NAME RingBufferTest COMMAND ring_buffer_test)
 # Ommit this test as it fails
 # add_test(NAME RingBufferLowCASTest COMMAND ring_buffer_low_cas_test)
 add_test(NAME BufferGeneralTest COMMAND buffer_general_test)
+add_test(NAME BufferSimpleTest COMMAND buffer_simple_test)
 
 # 5. Optional: Compiler Warnings
 if(MSVC)

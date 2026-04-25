@@ -6,6 +6,7 @@
  */
 
 #include "../../common/concepts/generic.hpp"
+#include "../generics.hpp"
 #include <atomic>
 #include <optional>
 
@@ -56,6 +57,8 @@ class ProducerConsumer {
 public:
   using Protocol = CellLockableApproachProtocol;
   using Layout = LayoutType;
+  using ConsumerInstanceType = roles::SingleInstance;
+  using ProducerInstanceType = roles::MultipleInstance;
 
   using data_type = Layout::data_type;
   using index_type = Layout::index_type;
