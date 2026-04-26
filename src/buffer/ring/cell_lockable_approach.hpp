@@ -5,7 +5,7 @@
  * @brief Logic for a cell-lockable ring buffer where synchronization occurs at the individual element level.
  */
 
-#include "../../common/concepts/generic.hpp"
+#include "../../common/generic.hpp"
 #include "../generics.hpp"
 #include <atomic>
 #include <optional>
@@ -97,14 +97,15 @@ public:
 
     // Try locking now
     auto l_g_opt = mem_layout.try_read_lock(r_h);
-    std::optional<data_type> output = std::nullopt;
-    if (l_g_opt.has_value()) {
-      auto l_g = std::move(*l_g_opt);
-      output = *l_g;
-    } // lock dropped here
+    if (l_g_opt.has_value()) [[likely]] {
+      data_type output = **l_g_opt;
+      l_g_opt.reset(); // lock dropped here
+      read_head.fetch_add(1, std::memory_order_acq_rel);
+      return output;
+    }
 
     read_head.fetch_add(1, std::memory_order_acq_rel);
-    return output;
+    return std::nullopt;
   }
 
   /**

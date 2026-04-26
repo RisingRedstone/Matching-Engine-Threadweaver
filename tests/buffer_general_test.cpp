@@ -124,7 +124,9 @@ void ConsumerProcess(Consumer consumer) {
 
   const int take_numbers = write_numbers * num_of_writers;
 #if TEST_CHECK == 1
-  ull *show_module = new ull[take_numbers](0);
+  alignas(64) ull *show_module = new ull[take_numbers](0);
+#else
+  alignas(64) ull *show_module = new ull[buffer_data_type::max_elems](0);
 #endif
   int i = 0;
   int attempts = 0;
@@ -151,17 +153,18 @@ void ConsumerProcess(Consumer consumer) {
       failed_attempts += attempts;
       attempts = 0;
 
-      buffer_data_type val = std::move(cons.value());
+      buffer_data_type &val = cons.value();
+
+      for (int j = 0; j < buffer_data_type::max_elems; j++) {
+        // Use vector instructions later here
 
 #if TEST_CHECK == 1
-      for (int j = 0; j < val.get_length(); j++) {
-        // Use vector instructions later here
         show_module[i] = val[j];
+#else
+        show_module[j] = val[j];
+#endif
         i++;
       }
-#else
-      i += val.get_length();
-#endif
     } else {
 #if PROFILING == 1
       // std::cout << "Reader: Got" << (int)i << " values out of " <<
@@ -216,8 +219,8 @@ void ConsumerProcess(Consumer consumer) {
     std::cout << "All Found" << std::endl;
   }
   delete[] check_numbers;
-  delete[] show_module;
 #endif
+  delete[] show_module;
 }
 
 void ProducerProcess(Producer producer, int n) {

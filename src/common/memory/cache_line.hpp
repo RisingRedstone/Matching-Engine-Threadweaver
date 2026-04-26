@@ -204,8 +204,8 @@ template <typename D> union alignas(cache_line_size) PackedCacheLine {
  * aligned blocks.
  */
 template <class D> struct alignas(cache_line_size) CacheAlignedHeaderLine {
-  alignas(cache_line_size) LengthHeader header;
-  alignas(cache_line_size) PackedCacheLine<D> data;
+  LengthHeader header;
+  PackedCacheLine<D> data;
 
   using index_type = PackedCacheLine<D>::index_type;
   using data_type = D;
@@ -225,7 +225,8 @@ template <class D> struct alignas(cache_line_size) CacheAlignedHeaderLine {
     header.length = other.header.length;
     return *this;
   }
-  CacheAlignedHeaderLine(CacheAlignedHeaderLine &&) = default;
+  CacheAlignedHeaderLine(CacheAlignedHeaderLine &&r_value)
+      : data(r_value.data), header(r_value.header) {}
   CacheAlignedHeaderLine &operator=(CacheAlignedHeaderLine &&) = default;
   data_type &operator[](const index_type &i) { return data[i]; }
   length_type &get_length() { return header.length; }

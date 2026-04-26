@@ -188,15 +188,15 @@ public:
     void unlock() {
       if (data == nullptr)
         return;
-      data_type::unlock(*data);
-      if (reader)
+      if constexpr (reader)
         data_type::clear_data(*data);
+      data_type::unlock(*data);
     }
     LockGuard(LockGuard &&r_value) : data(r_value.data) {
       r_value.data = nullptr;
     }
     LockGuard &operator=(LockGuard &&r_value) {
-      unlock();
+      // unlock();
       data = r_value.data;
       r_value.data = nullptr;
     }
@@ -219,7 +219,7 @@ public:
     if (!data_type::contains_data(this->operator[](i))) {
       return {};
     }
-    return std::move(l_g);
+    return l_g;
   }
   std::optional<index_writer_guard> try_write_lock(index_type i) {
     // try locking
