@@ -7,6 +7,7 @@
 
 #include "../../common/concepts/generic.hpp"
 #include "../../common/generic.hpp"
+#include "../../common/memory/guards.hpp"
 #include <atomic>
 #include <concepts>
 #include <emmintrin.h>
@@ -176,47 +177,29 @@ public:
   }
   MemLayout::index_type_a &get_read_head() const { return layout->read_head; }
 
-  /** @brief RAII Guard satisfying the requirements of @ref ReadLockableIndex / @ref WriteLockableIndex. */
-  template <bool reader> class LockGuard {
-  private:
-    data_type *data;
-
-  public:
-    LockGuard(data_type *data) : data(data) {}
-    LockGuard(LockGuard &) = delete;
-    LockGuard &operator=(LockGuard &) = delete;
-    void unlock() {
-      if (data == nullptr)
-        return;
-      if constexpr (reader)
-        data_type::clear_data(*data);
-      data_type::unlock(*data);
-    }
-    LockGuard(LockGuard &&r_value) : data(r_value.data) {
-      r_value.data = nullptr;
-    }
-    LockGuard &operator=(LockGuard &&r_value) {
-      // unlock();
-      data = r_value.data;
-      r_value.data = nullptr;
-    }
-
-    data_type &operator*() { return *data; }
-
-    ~LockGuard() {
-      // unlock here
-      unlock();
+  struct ReaderUnlockStruct {
+    void operator()(data_type &d) {
+      data_type::clear_data(d);
+      data_type::unlock(d);
     }
   };
-  using index_reader_guard = LockGuard<true>;
-  using index_writer_guard = LockGuard<false>;
+  struct WriterUnlockStruct {
+    void operator()(data_type &d) { data_type::unlock(d); }
+  };
+
+  using index_reader_guard =
+      common::memory::guards::SingleResourceLockGuard<data_type,
+                                                      ReaderUnlockStruct>;
+  using index_writer_guard =
+      common::memory::guards::SingleResourceLockGuard<data_type,
+                                                      WriterUnlockStruct>;
   std::optional<index_reader_guard> try_read_lock(index_type i) {
     // try locking
     while (!data_type::try_lock(this->operator[](i))) {
-      _mm_pause();
+      CPU_PAUSE();
     }
-    auto l_g = index_reader_guard(&(this->operator[](i)));
-    if (!data_type::contains_data(this->operator[](i))) {
+    index_reader_guard l_g(this->operator[](i));
+    if (!data_type::contains_data(*l_g)) {
       return {};
     }
     return l_g;
@@ -224,13 +207,13 @@ public:
   std::optional<index_writer_guard> try_write_lock(index_type i) {
     // try locking
     while (!data_type::try_lock(this->operator[](i))) {
-      _mm_pause();
+      CPU_PAUSE();
     }
-    auto l_g = index_writer_guard(&(this->operator[](i)));
-    if (data_type::contains_data(this->operator[](i))) {
+    index_writer_guard l_g(this->operator[](i));
+    if (data_type::contains_data(*l_g)) {
       return {};
     }
-    return std::move(l_g);
+    return l_g;
   }
 };
 
@@ -243,6 +226,8 @@ public:
 // template class StaticLockLessRingBufferCellLockableLayout<data, 1024,
 //                                                           Allocator>;
 
+} // namespace engine::buffer::layout
+//
 // #ifdef LSP_ENABLED
 // #include "../../allocators/one_time_static_allocator.hpp"
 // #include "../../common/memory/cache_line.hpp"
@@ -250,8 +235,6 @@ public:
 // template <typename Layout>
 // using Allocator =
 //     engine::allocators::OneTimeStaticSharedMemoryAllocator<Layout>;
-// template class StaticLockLessRingBufferCellLockableLayout<data, 1024,
-//                                                           Allocator>;
+// template class engine::buffer::layout::
+//     StaticLockLessRingBufferCellLockableLayout<data, 1024, Allocator>;
 // #endif
-
-} // namespace engine::buffer::layout

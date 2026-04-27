@@ -41,4 +41,25 @@ inline bool custom_test_and_set(uint8_t *addr, int bit_pos) {
   return old_bit;
 }
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) ||             \
+    defined(_M_IX86)
+// x86 / x86_64
+#if defined(_MSC_VER)
+#include <intrin.h>
+#define CPU_PAUSE() _mm_pause()
+#else
+#define CPU_PAUSE() __asm__ __volatile__("pause" ::: "memory")
+#endif
+#elif defined(__arm__) || defined(__aarch64__) || defined(_M_ARM) ||           \
+    defined(_M_ARM64)
+// ARM / ARM64
+#if defined(_MSC_VER)
+#include <intrin.h>
+#define CPU_PAUSE() __yield()
+#else
+#define CPU_PAUSE() __asm__ __volatile__("yield" ::: "memory")
+#endif
+#else
+#define CPU_PAUSE() ((void)0)
+#endif
 } // namespace engine::common
