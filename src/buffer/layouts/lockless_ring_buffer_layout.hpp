@@ -188,11 +188,11 @@ public:
   };
 
   using index_reader_guard =
-      common::memory::guards::InstSingleResourceLockGuard<data_type,
-                                                          ReaderUnlockStruct>;
+      memory::guards::InstSingleResourceLockGuard<data_type,
+                                                  ReaderUnlockStruct>;
   using index_writer_guard =
-      common::memory::guards::InstSingleResourceLockGuard<data_type,
-                                                          WriterUnlockStruct>;
+      memory::guards::InstSingleResourceLockGuard<data_type,
+                                                  WriterUnlockStruct>;
   std::optional<index_reader_guard> try_read_lock(index_type i) {
     // try locking
     while (!data_type::try_lock(this->operator[](i))) {

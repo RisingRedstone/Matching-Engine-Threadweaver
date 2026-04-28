@@ -115,9 +115,8 @@ public:
       read_head.fetch_add(1, std::memory_order_acq_rel);
     }
   };
-  using reader_data_guard =
-      common::memory::guards::InstSingleResourceLockGuardWrapper<
-          typename Layout::index_reader_guard, ReaderDataGuard>;
+  using reader_data_guard = memory::guards::InstSingleResourceLockGuardWrapper<
+      typename Layout::index_reader_guard, ReaderDataGuard>;
 
   /**
    * @brief Returns a RAII pattern Data Guard that can be used to read claimed data from the ring_buffer.
