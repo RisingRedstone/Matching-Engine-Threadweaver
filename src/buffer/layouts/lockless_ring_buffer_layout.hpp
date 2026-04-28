@@ -188,17 +188,17 @@ public:
   };
 
   using index_reader_guard =
-      common::memory::guards::SingleResourceLockGuard<data_type,
-                                                      ReaderUnlockStruct>;
+      common::memory::guards::InstSingleResourceLockGuard<data_type,
+                                                          ReaderUnlockStruct>;
   using index_writer_guard =
-      common::memory::guards::SingleResourceLockGuard<data_type,
-                                                      WriterUnlockStruct>;
+      common::memory::guards::InstSingleResourceLockGuard<data_type,
+                                                          WriterUnlockStruct>;
   std::optional<index_reader_guard> try_read_lock(index_type i) {
     // try locking
     while (!data_type::try_lock(this->operator[](i))) {
       CPU_PAUSE();
     }
-    index_reader_guard l_g(this->operator[](i));
+    index_reader_guard l_g(this->operator[](i), ReaderUnlockStruct{});
     if (!data_type::contains_data(*l_g)) {
       return {};
     }
@@ -209,7 +209,7 @@ public:
     while (!data_type::try_lock(this->operator[](i))) {
       CPU_PAUSE();
     }
-    index_writer_guard l_g(this->operator[](i));
+    index_writer_guard l_g(this->operator[](i), WriterUnlockStruct{});
     if (data_type::contains_data(*l_g)) {
       return {};
     }

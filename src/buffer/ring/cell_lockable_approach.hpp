@@ -108,6 +108,47 @@ public:
     return std::nullopt;
   }
 
+  template <typename U> struct ReaderDataGuard {
+    index_type_a &read_head;
+    void operator()(data_type &d, U prev_lock) {
+      prev_lock(d);
+      read_head.fetch_add(1, std::memory_order_acq_rel);
+    }
+  };
+  using reader_data_guard =
+      common::memory::guards::InstSingleResourceLockGuardWrapper<
+          typename Layout::index_reader_guard, ReaderDataGuard>;
+
+  /**
+   * @brief Returns a RAII pattern Data Guard that can be used to read claimed data from the ring_buffer.
+   * @details Claims the current read head, attempts to acquire the cell's read lock, 
+   * and advances the head regardless of cell content (cleaning up if empty). If the cell is acquired, 
+   * a Data Lock is created and then returned.
+   */
+  std::optional<reader_data_guard> read_lock() {
+    index_type_a &read_head = mem_layout.get_read_head();
+    index_type_a &write_head = mem_layout.get_write_head();
+
+    index_type r_h = read_head.load(std::memory_order_acquire);
+    index_type w_h = write_head.load(std::memory_order_acquire);
+    if (r_h >= w_h) {
+      return std::nullopt;
+    }
+
+    // Try locking now
+    auto l_g_opt = mem_layout.try_read_lock(r_h);
+    if (l_g_opt.has_value()) [[likely]] {
+      reader_data_guard output(std::move(l_g_opt.value()),
+                               {.read_head = read_head});
+      return std::move(output);
+    }
+
+    read_head.fetch_add(1, std::memory_order_acq_rel);
+    return std::nullopt;
+  }
+
+  // I could write a write_lock... but why bother?
+
   /**
    * @brief Writes data to the ring buffer.
    * @details Claims a write index via atomic increment. If the buffer is full, 
@@ -144,7 +185,7 @@ public:
       index_type val = w_h - 1;
       index_type expected = read_head.load(std::memory_order_relaxed);
       while (val < expected && !read_head.compare_exchange_weak(
-                                   expected, val, std::memory_order_acq_rel,
+                                   expected, val, std::memory_order_release,
                                    std::memory_order_relaxed))
         ;
 

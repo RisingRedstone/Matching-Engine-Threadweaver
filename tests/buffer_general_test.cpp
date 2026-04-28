@@ -147,13 +147,13 @@ void ConsumerProcess(Consumer consumer) {
 #if PREFETCHING == 1 && TEST_CHECK == 1
     __builtin_prefetch(&show_module[i + 16], 1, 3);
 #endif
-    std::optional<buffer_data_type> cons = consumer.read();
+    auto cons = consumer.read_lock();
     if (cons.has_value()) {
+      buffer_data_type val = *cons.value();
+      cons.reset();
 
       failed_attempts += attempts;
       attempts = 0;
-
-      buffer_data_type &val = cons.value();
 
       for (int j = 0; j < buffer_data_type::max_elems; j++) {
         // Use vector instructions later here
