@@ -142,7 +142,7 @@ template <typename D, template <typename> typename Unlock>
 class InstSingleResourceLockGuardWrapper {
 public:
   using data_type = D::data_type;
-  using UnlockOnDestruct = Unlock<typename D::UnlockOnDestruct>;
+  using UnlockOnDestructWrap = Unlock<typename D::UnlockOnDestruct>;
 
 public:
   data_type *data; ///< Pointer to the managed resource.
@@ -151,8 +151,8 @@ public:
    * @struct CombinedUnlock
    * @brief Internal helper to store and execute the new and previous unlock logic.
    */
-  struct {
-    UnlockOnDestruct unlock; ///< The new wrapping unlock functor.
+  struct UnlockOnDestruct {
+    UnlockOnDestructWrap unlock; ///< The new wrapping unlock functor.
     typename D::UnlockOnDestruct
         prev_unlock; ///< The original unlock functor from the wrapped guard.
     /** @brief Executes the wrapper unlock logic, passing the previous unlocker as context. */
@@ -165,7 +165,7 @@ public:
    * @param unlock The new unlock functor instance.
    */
   explicit InstSingleResourceLockGuardWrapper(D &&r_value,
-                                              UnlockOnDestruct unlock)
+                                              UnlockOnDestructWrap unlock)
       : data(r_value.data), unlock({.unlock = std::move(unlock),
                                     .prev_unlock = std::move(r_value.unlock)}) {
     r_value.data = nullptr;

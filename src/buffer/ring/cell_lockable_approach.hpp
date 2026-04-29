@@ -89,7 +89,7 @@ public:
     index_type_a &read_head = mem_layout.get_read_head();
     index_type_a &write_head = mem_layout.get_write_head();
 
-    index_type r_h = read_head.load(std::memory_order_acquire);
+    index_type r_h = read_head.load(std::memory_order_relaxed);
     index_type w_h = write_head.load(std::memory_order_acquire);
     if (r_h >= w_h) {
       return {};
@@ -100,11 +100,11 @@ public:
     if (l_g_opt.has_value()) [[likely]] {
       data_type output = **l_g_opt;
       l_g_opt.reset(); // lock dropped here
-      read_head.fetch_add(1, std::memory_order_acq_rel);
+      read_head.fetch_add(1, std::memory_order_release);
       return output;
     }
 
-    read_head.fetch_add(1, std::memory_order_acq_rel);
+    read_head.fetch_add(1, std::memory_order_release);
     return std::nullopt;
   }
 
@@ -112,7 +112,7 @@ public:
     index_type_a &read_head;
     void operator()(data_type &d, U prev_lock) {
       prev_lock(d);
-      read_head.fetch_add(1, std::memory_order_acq_rel);
+      read_head.fetch_add(1, std::memory_order_release);
     }
   };
   using reader_data_guard = memory::guards::InstSingleResourceLockGuardWrapper<
@@ -128,7 +128,7 @@ public:
     index_type_a &read_head = mem_layout.get_read_head();
     index_type_a &write_head = mem_layout.get_write_head();
 
-    index_type r_h = read_head.load(std::memory_order_acquire);
+    index_type r_h = read_head.load(std::memory_order_relaxed);
     index_type w_h = write_head.load(std::memory_order_acquire);
     if (r_h >= w_h) {
       return std::nullopt;
@@ -142,7 +142,7 @@ public:
       return std::move(output);
     }
 
-    read_head.fetch_add(1, std::memory_order_acq_rel);
+    read_head.fetch_add(1, std::memory_order_release);
     return std::nullopt;
   }
 
@@ -163,7 +163,7 @@ public:
         w_h = cache_w_h.value();
         cache_w_h = std::nullopt;
       } else {
-        w_h = write_head.fetch_add(1, std::memory_order_acq_rel);
+        w_h = write_head.fetch_add(1, std::memory_order_relaxed);
       }
       index_type r_h = read_head.load(std::memory_order_acquire);
 

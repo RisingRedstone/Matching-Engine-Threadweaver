@@ -235,7 +235,7 @@ template <class D> struct alignas(cache_line_size) CacheAlignedHeaderLine {
     auto atomic_ref = std::atomic_ref<header_type>(c.header.header);
     header_type v = HEADER_NOT_LOCKED;
     atomic_ref.compare_exchange_strong(
-        v, HEADER_LOCKED, std::memory_order_acq_rel, std::memory_order_relaxed);
+        v, HEADER_LOCKED, std::memory_order_acquire, std::memory_order_relaxed);
     return v == HEADER_NOT_LOCKED; // if it was header_locked, then the lock has
                                    // failed
   }
@@ -246,11 +246,11 @@ template <class D> struct alignas(cache_line_size) CacheAlignedHeaderLine {
   }
   static void clear_data(CacheAlignedHeaderLine &c) {
     auto atomic_ref = std::atomic_ref<length_type>(c.header.length);
-    atomic_ref.store(0, std::memory_order_release);
+    atomic_ref.store(0, std::memory_order_relaxed);
   }
   static bool contains_data(CacheAlignedHeaderLine &c) {
     auto atomic_ref = std::atomic_ref<length_type>(c.header.length);
-    return atomic_ref.load(std::memory_order_acquire) > 0;
+    return atomic_ref.load(std::memory_order_relaxed) > 0;
   }
 };
 
