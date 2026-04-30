@@ -90,7 +90,7 @@ public:
     index_type_a &write_head = mem_layout.get_write_head();
 
     index_type r_h = read_head.load(std::memory_order_relaxed);
-    index_type w_h = write_head.load(std::memory_order_acquire);
+    index_type w_h = write_head.load(std::memory_order_relaxed);
     if (r_h >= w_h) {
       return {};
     }
@@ -100,11 +100,11 @@ public:
     if (l_g_opt.has_value()) [[likely]] {
       data_type output = **l_g_opt;
       l_g_opt.reset(); // lock dropped here
-      read_head.fetch_add(1, std::memory_order_release);
+      read_head.fetch_add(1, std::memory_order_relaxed);
       return output;
     }
 
-    read_head.fetch_add(1, std::memory_order_release);
+    read_head.fetch_add(1, std::memory_order_relaxed);
     return std::nullopt;
   }
 
@@ -112,7 +112,7 @@ public:
     index_type_a &read_head;
     void operator()(data_type &d, U prev_lock) {
       prev_lock(d);
-      read_head.fetch_add(1, std::memory_order_release);
+      read_head.fetch_add(1, std::memory_order_relaxed);
     }
   };
   using reader_data_guard = memory::guards::InstSingleResourceLockGuardWrapper<
@@ -129,7 +129,7 @@ public:
     index_type_a &write_head = mem_layout.get_write_head();
 
     index_type r_h = read_head.load(std::memory_order_relaxed);
-    index_type w_h = write_head.load(std::memory_order_acquire);
+    index_type w_h = write_head.load(std::memory_order_relaxed);
     if (r_h >= w_h) {
       return std::nullopt;
     }
@@ -142,7 +142,7 @@ public:
       return std::move(output);
     }
 
-    read_head.fetch_add(1, std::memory_order_release);
+    read_head.fetch_add(1, std::memory_order_relaxed);
     return std::nullopt;
   }
 
@@ -165,7 +165,7 @@ public:
       } else {
         w_h = write_head.fetch_add(1, std::memory_order_relaxed);
       }
-      index_type r_h = read_head.load(std::memory_order_acquire);
+      index_type r_h = read_head.load(std::memory_order_relaxed);
 
       if (w_h >= Layout::size + r_h) {
         cache_w_h = w_h;
@@ -184,7 +184,7 @@ public:
       index_type val = w_h - 1;
       index_type expected = read_head.load(std::memory_order_relaxed);
       while (val < expected && !read_head.compare_exchange_weak(
-                                   expected, val, std::memory_order_release,
+                                   expected, val, std::memory_order_relaxed,
                                    std::memory_order_relaxed))
         ;
 
