@@ -48,6 +48,10 @@ target_link_libraries(ring_buffer_test PRIVATE engine_logic)
 add_executable(buffer_simple_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/buffer_simple_test.cpp)
 target_link_libraries(ring_buffer_test PRIVATE engine_logic)
 
+# Shared Memory Test
+add_executable(shared_memory_test tests/shared_memory_test.cpp)
+target_link_libraries(shared_memory_test PRIVATE engine_logic)
+
 # used for tests
 set(APPROACH "2" CACHE STRING "What approach to use. only 1 (three_pointer) and 2 (cell_lockable) available")
 set(NUM_OF_WRITERS "8" CACHE STRING "The number of writers for the test.")
@@ -76,6 +80,7 @@ add_test(NAME RingBufferTest COMMAND ring_buffer_test)
 # add_test(NAME RingBufferLowCASTest COMMAND ring_buffer_low_cas_test)
 add_test(NAME BufferGeneralTest COMMAND buffer_general_test)
 add_test(NAME BufferSimpleTest COMMAND buffer_simple_test)
+add_test(NAME SharedMemoryTest COMMAND shared_memory_test)
 
 # 5. Optional: Compiler Warnings
 if(MSVC)
