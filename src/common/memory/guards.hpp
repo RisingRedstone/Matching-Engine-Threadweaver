@@ -196,4 +196,39 @@ public:
   InstSingleResourceLockGuardWrapper &
   operator=(InstSingleResourceLockGuardWrapper &other) = delete;
 };
+
+template <template <bool> typename T>
+// this class must have a lock() and unlock()
+class TemplateLockedLockGuard {
+  using not_locked = T<false>;
+  using locked = T<true>;
+
+private:
+  locked *lock_ptr;
+  TemplateLockedLockGuard() {}
+
+public:
+  TemplateLockedLockGuard(not_locked &l) { lock_ptr = &l.lock(); }
+  TemplateLockedLockGuard(const TemplateLockedLockGuard &) = delete;
+  TemplateLockedLockGuard &operator=(const TemplateLockedLockGuard &) = delete;
+  TemplateLockedLockGuard(TemplateLockedLockGuard &&r_value)
+      : lock_ptr(r_value.lock_ptr) {
+    r_value.lock_ptr = nullptr;
+  }
+  TemplateLockedLockGuard &operator=(TemplateLockedLockGuard &&r_value) {
+    if (this != &r_value) {
+      lock_ptr = r_value.lock_ptr;
+      r_value.lock_ptr = nullptr;
+    }
+    return *this;
+  }
+  locked &operator*() { return *lock_ptr; }
+  locked *operator->() { return lock_ptr; }
+  ~TemplateLockedLockGuard() {
+    if (lock_ptr != nullptr) {
+      lock_ptr->unlock();
+    }
+  }
+};
+
 } // namespace engine::memory::guards
